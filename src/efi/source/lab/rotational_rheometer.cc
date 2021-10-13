@@ -329,7 +329,7 @@ run (Sample<dim> &sample,boost::filesystem::path outdir)
                                       + input.data[step].second)));
                 }
 
-                AssertThrow (++refinement_lvl < 6,
+                AssertThrow (++refinement_lvl < 100,
                         dealii::ExcMessage ("Time step refinement level > 5."));
                 --step;
             }
