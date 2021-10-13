@@ -344,7 +344,7 @@ run (Sample<dim> &sample,boost::filesystem::path outdir)
                     ///
                     outdir /
                     boost::filesystem::path(
-                            infilename.stem().string() + ".csv");
+                            infilename.stem().string());
 
             io::CSVWriter<3> out(outfilename.string()); // TODO parametrize this
             out.write_headers("time","angle","torque");

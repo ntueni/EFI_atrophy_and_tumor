@@ -169,15 +169,15 @@ parse_input (std::string const &filename)
     // output directory.
     if (MPI::is_root (this->mpi_communicator))
     {
-        std::string stripped_filename = filename.substr(0,filename.rfind('.'));
+        //std::string stripped_filename = filename.substr(0,filename.rfind('.'));
 
         // Just a shortcut for the separator
         // in the file path
         std::string sep (1,this->output_directory.separator);
 
         // Get the paths of the output files
-        std::string path_prm  = this->output_directory.string() + sep + stripped_filename + ".prm";
-        std::string path_json = this->output_directory.string() + sep + stripped_filename + ".json";
+        std::string path_prm  = this->output_directory.string() + sep + "parameter_file" + ".prm";
+        std::string path_json = this->output_directory.string() + sep + "parameter_file" + ".json";
 
         // Open the filestreams
         std::ofstream output_txt  (path_prm);
