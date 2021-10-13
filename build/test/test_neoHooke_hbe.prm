@@ -1,0 +1,66 @@
+subsection experiment
+
+  subsection testing_device@[type=tension_compression_testing_device,instance=1]
+    set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/tension_c3
+  end
+
+  subsection testing_device@[type=tension_compression_testing_device,instance=2]
+   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/compression_c3
+  end
+
+  subsection testing_device@[type=rotational_rheometer,instance=3]
+   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_neg
+    #set column name angle = displacement
+ end
+
+  subsection testing_device@[type=rotational_rheometer,instance=4]
+   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_pos
+   #set column name angle = displacement
+  end
+
+  subsection sample
+
+    subsection finite element
+      set polynomial degree = 2
+    end
+
+    subsection geometry@[type=cylinder]
+      set radius = 4e-3
+      set height = 4.62498828125e-03
+      set relative maxium element size = 0.5
+      #set refinement method = boundaries
+    end
+
+    subsection constitutive@[type=modified_one_term_ogden,instance=1]
+          set alpha = 2
+          set bulk modulus = 4833
+          set empirical coefficient = -2
+          set mu = 500
+    end
+
+    subsection nonlinear_solver_control
+      set absolute tolerance = 1e-10
+      set linear solver type = direct
+      set maximum number of iterations = 10
+      set relative tolerance = 1e-08
+    end
+
+    subsection quadrature
+      set quadrature points per space direction = auto
+      set quadrature type = gauss
+    end
+  end
+
+
+
+  
+  set output directory = out
+
+  #set paraview output = true
+
+  # options: quiet|normal|verbose|very verbose|debug
+  set verbosity console = debug
+
+  # options: quiet|normal|verbose|very verbose|debug
+  set verbosity logfile = normal
+end

@@ -1,0 +1,8 @@
+/calculate/jan/efiProj/old/efi_hbopt/build/CMakeFiles/rebuild_cache.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/CMakeFiles/edit_cache.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/CMakeFiles/efi_vlab.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/CMakeFiles/release.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/CMakeFiles/debug.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/efi/CMakeFiles/rebuild_cache.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/efi/CMakeFiles/edit_cache.dir
+/calculate/jan/efiProj/old/efi_hbopt/build/efi/CMakeFiles/efi.dir
