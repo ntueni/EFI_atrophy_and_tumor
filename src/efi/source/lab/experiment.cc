@@ -27,6 +27,9 @@ declare_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
 
+    prm.declare_entry("reset","false",Patterns::Bool(),
+            "reset the solution vector after each testing device");
+
     prm.declare_entry ("output directory","",Patterns::Anything(),
             "options: set directory or leave blank for current directory");
 
@@ -53,6 +56,9 @@ Experiment<dim>::
 parse_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
+
+    this->reset =
+        prm.get_bool("reset");
 
     // Set the path to the output directory
     this->output_directory =

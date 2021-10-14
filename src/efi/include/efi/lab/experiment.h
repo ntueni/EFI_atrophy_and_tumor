@@ -95,6 +95,8 @@ private:
     boost::filesystem::path output_directory;
 
     boost::filesystem::path input_directory;
+
+    bool reset;
 };
 
 
@@ -160,7 +162,11 @@ Experiment<dim>::
 run ()
 {
     for (auto &device : this->devices)
+    {
+        if(this->reset)
+            this->sample->initialize();
         device.second->run(*(this->sample), this->output_directory);
+    }
 }
 
 }// namespace efi

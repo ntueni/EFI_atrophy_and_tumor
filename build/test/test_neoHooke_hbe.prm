@@ -1,22 +1,24 @@
 subsection experiment
 
+  set reset = true
+
   subsection testing_device@[type=tension_compression_testing_device,instance=1]
     set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/tension_c3
   end
 
   subsection testing_device@[type=tension_compression_testing_device,instance=2]
-   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/compression_c3
+   set input files = /calculate/jan/efiProj/hbe_data/processed/HBE_05/HBE_05_23/compression_c3
   end
 
-  subsection testing_device@[type=rotational_rheometer,instance=3]
-   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_neg
+  #subsection testing_device@[type=rotational_rheometer,instance=3]
+  # set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_neg
     #set column name angle = displacement
- end
+ #end
 
-  subsection testing_device@[type=rotational_rheometer,instance=4]
-   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_pos
+  #subsection testing_device@[type=rotational_rheometer,instance=4]
+  # set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/Torsion_l2_c3_pos
    #set column name angle = displacement
-  end
+  #end
 
   subsection sample
 
