@@ -1,6 +1,5 @@
 file(REMOVE_RECURSE
   "CMakeFiles/efi_vlab.dir/main.cc.o"
-  "CMakeFiles/efi_vlab.dir/main.cc.o.d"
   "efi_vlab"
   "efi_vlab.pdb"
 )

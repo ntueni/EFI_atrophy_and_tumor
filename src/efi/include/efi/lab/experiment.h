@@ -164,7 +164,7 @@ run ()
     for (auto &device : this->devices)
     {
         if(this->reset)
-            this->sample->initialize();
+            this->sample->reset();
         device.second->run(*(this->sample), this->output_directory);
     }
 }

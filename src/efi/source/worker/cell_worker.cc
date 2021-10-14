@@ -236,6 +236,8 @@ do_fill (ScratchData<dim> &scratch_data,
                     const unsigned int si0 = shape_to_system_indices[i][0];
                     const unsigned int ci0 = shape_to_component_indices[i][0];
 
+                    //FIXME segfault thrown?
+                    Assert(si0 < gradN.size(),StandardExceptions::ExcMessage("index exceeds vector gradN"));
                     R = -JxW[q] * (my_tau * gradN[si0][ci0]);
 
                     for (r = 0; r < dim; ++r)

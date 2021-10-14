@@ -94,6 +94,10 @@ public:
     void
     initialize ();
 
+    virtual
+    void
+    reset ();
+
     //
     virtual
     void

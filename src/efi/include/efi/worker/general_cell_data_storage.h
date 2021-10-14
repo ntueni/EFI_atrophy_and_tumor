@@ -97,6 +97,7 @@ void
 GeneralCellDataStorage::
 initialize (const CellIteratorRange &cells)
 {
+    cell_data.clear();
     for (const auto &cell : cells)
         cell_data.emplace (cell->id(),dealii::GeneralDataStorage());
 }

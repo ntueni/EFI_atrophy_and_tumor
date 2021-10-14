@@ -7,7 +7,7 @@ subsection experiment
   end
 
   subsection testing_device@[type=tension_compression_testing_device,instance=2]
-   set input files = /calculate/jan/efiProj/hbe_data/processed/HBE_05/HBE_05_23/compression_c3
+   set input files = /calculate/jan/efiProj/hbe_data/processed_red/HBE_05/HBE_05_23/compression_c3
   end
 
   #subsection testing_device@[type=rotational_rheometer,instance=3]

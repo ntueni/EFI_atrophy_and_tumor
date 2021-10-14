@@ -64,13 +64,13 @@ evaluate (ScratchData<dim> &scratch_data) const
    std::array<std::array<Tensor<2,dim,ad_type>,dim>,dim> ln_dyad_ln; // ln_dyad_ln[a][b] = outer_product(lambda[a]*n[a],lambda[b]*n[b])
 
 
-   Tensor<1,dim,ad_type> principal_stresses_vol;  // principal isochoric stresses
-   Tensor<1,dim,ad_type> principal_stresses_iso;  // principal volumetric stresses
+   Tensor<1,dim,ad_type> principal_stresses_vol;  // principal volumetric stresses
+   Tensor<1,dim,ad_type> principal_stresses_iso;  // principal isochoric stresses
 
    Tensor<1,dim,ad_type> principal_S;             // principal Kirchoff stresses
 
-   SymmetricTensor<2,dim,ad_type> principal_stress_tangents_vol;  // principal isochoric stresses
-   SymmetricTensor<2,dim,ad_type> principal_stress_tangents_iso;  // principal volumetric stresses
+   SymmetricTensor<2,dim,ad_type> principal_stress_tangents_vol;  // principal volumetric stresses
+   SymmetricTensor<2,dim,ad_type> principal_stress_tangents_iso;  // principal isochoric  stresses
 
    // Since the principal stresses are derived from
    // a potential their tangent is symmetric.

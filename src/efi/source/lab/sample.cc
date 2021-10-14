@@ -321,7 +321,32 @@ initialize ()
             this->dof_handler,
             this->locally_relevant_dofs);
 
-    // Initialize the vectors (locally owned and locally relevant)
+    // compute the ghosted locally_relevant_solution vector
+    this->locally_relevant_solution = this->locally_owned_solution;
+
+    this->reinit_constraints();
+
+    this->reset();
+
+    efilog(Verbosity::very_verbose) << "Sample<dim>::constraints has  "
+                                    << this->constraints.n_constraints()
+                                    << " constraints"
+                                    << std::endl;
+
+    efilog(Verbosity::very_verbose) << "Sample<dim>::dof_handler has  "
+                                    << this->dof_handler.n_dofs()
+                                    << " degrees of freedom"
+                                    << std::endl;
+    // just some output
+    efilog(Verbosity::verbose) << "Sample finished initialization." << std::endl;
+}
+
+template <int dim>
+void
+Sample<dim>::
+reset()
+{
+     // Initialize the vectors (locally owned and locally relevant)
     this->locally_relevant_solution.reinit (
             this->locally_owned_dofs,
             this->locally_relevant_dofs,
@@ -339,31 +364,12 @@ initialize ()
             this->locally_owned_dofs,
             this->mpi_communicator);
 
-    // compute the ghosted locally_relevant_solution vector
-    this->locally_relevant_solution = this->locally_owned_solution;
-
-    this->reinit_constraints();
-
     // Initialize the history data
     this->cell_data_history_storage->initialize (
             this->dof_handler.active_cell_iterators());
     this->tmp_cell_data_history_storage->initialize (
             this->dof_handler.active_cell_iterators());
-
-    efilog(Verbosity::very_verbose) << "Sample<dim>::constraints has  "
-                                    << this->constraints.n_constraints()
-                                    << " constraints"
-                                    << std::endl;
-
-    efilog(Verbosity::very_verbose) << "Sample<dim>::dof_handler has  "
-                                    << this->dof_handler.n_dofs()
-                                    << " degrees of freedom"
-                                    << std::endl;
-    // just some output
-    efilog(Verbosity::verbose) << "Sample finished initialization." << std::endl;
 }
-
-
 
 template <int dim>
 void
