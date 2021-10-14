@@ -97,6 +97,8 @@ private:
 
     // Input data
     std::vector<InputData> input_data;
+
+    std::string column_name_displacement;
 };
 
 

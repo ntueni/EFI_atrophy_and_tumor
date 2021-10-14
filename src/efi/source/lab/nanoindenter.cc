@@ -36,7 +36,7 @@ namespace efi {
 
 template <int dim>
 void
-RotationalRheometer<dim>::
+Nanoindenter<dim>::
 declare_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
@@ -50,7 +50,7 @@ declare_parameters (dealii::ParameterHandler &prm)
 
     prm.declare_entry("column name angle","angle");
 
-    efilog(Verbosity::verbose) << "RotationalRheometer finished declaring "
+    efilog(Verbosity::verbose) << "Nanoindenter finished declaring "
                                   "parameters."
                                << std::endl;
 }
@@ -59,7 +59,7 @@ declare_parameters (dealii::ParameterHandler &prm)
 
 template <int dim>
 void
-RotationalRheometer<dim>::
+Nanoindenter<dim>::
 parse_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
@@ -77,7 +77,7 @@ parse_parameters (dealii::ParameterHandler &prm)
         boost::filesystem::path full_path = input_directory / file;
         this->read_test_protocol (full_path.string(),column_name_angle);
     }
-    efilog(Verbosity::verbose) << "RotationalRheometer finished parsing "
+    efilog(Verbosity::verbose) << "Nanoindenter finished parsing "
                                   "parameters."
                                << std::endl;
 }
@@ -86,7 +86,7 @@ parse_parameters (dealii::ParameterHandler &prm)
 
 template <int dim>
 boost::signals2::connection
-RotationalRheometer<dim>::
+Nanoindenter<dim>::
 connect_constraints (Sample<dim> &sample) const
 {
     using namespace dealii;
@@ -113,7 +113,7 @@ connect_constraints (Sample<dim> &sample) const
 template <int dim>
 inline
 void
-RotationalRheometer<dim>::
+Nanoindenter<dim>::
 read_test_protocol (const std::string &filename, const std::string &column_name_angle)
 {
     using namespace dealii;
@@ -147,58 +147,11 @@ read_test_protocol (const std::string &filename, const std::string &column_name_
 
 
 
-namespace efi_internal {
-
-template <int dim>
-dealii::Tensor<2,dim>
-rotation_matrix (const double angle, const unsigned int axis
-        = dealii::numbers::invalid_unsigned_int);
-
-
-// return a rotation matrix in 1d
-template<>
-dealii::Tensor<2,1>
-rotation_matrix<1> (const double, const unsigned int)
-{
-    dealii::Tensor<2,1> rotation;
-    rotation[0][0] = 1.;
-    return rotation;
-}
-
-
-// return a rotation matrix in 2d
-template<>
-dealii::Tensor<2,2>
-rotation_matrix<2> (const double angle, const unsigned int axis)
-{
-    Assert (axis == dealii::numbers::invalid_unsigned_int,
-            dealii::ExcMessage("The rotation axis cannot be chosen in 2d."));
-    (void)axis;
-
-    return dealii::Physics::Transformations::Rotations::rotation_matrix_2d (
-            angle);
-}
-
-
-// return a rotation matrix in 3d
-template<>
-dealii::Tensor<2,3>
-rotation_matrix<3> (const double angle, const unsigned int axis)
-{
-    AssertIndexRange (axis,3);
-
-    return dealii::Physics::Transformations::Rotations::rotation_matrix_3d (
-            dealii::Point<3>::unit_vector(axis),angle);
-}
-
-}// namespace efi_internal
-
-
 
 template <int dim>
 inline
 void
-RotationalRheometer<dim>::
+Nanoindenter<dim>::
 run (Sample<dim> &sample)
 {
     using namespace dealii;
@@ -280,10 +233,7 @@ run (Sample<dim> &sample)
                             return 0.;
                         else
                         {
-                            auto rotated = efi_internal::rotation_matrix<dim>(
-                                    rotation_angle, 0) * point;
-                            const unsigned int i = c-first_u_comp;
-                            return rotated[i]-point[i];
+                            return 0.;
                         }
                     };
 
@@ -394,10 +344,10 @@ run (Sample<dim> &sample)
 
 
 // Instantiation
-template class RotationalRheometer<2>;
-template class RotationalRheometer<3>;
+template class Nanoindenter<2>;
+template class Nanoindenter<3>;
 
 // Registration
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RotationalRheometer,2));
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RotationalRheometer,3));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Nanoindenter,2));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Nanoindenter,3));
 }

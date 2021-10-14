@@ -67,7 +67,7 @@ parse_parameters (dealii::ParameterHandler &prm)
     std::vector<std::string> files =
             Utilities::split_string_list(prm.get ("input files"),',');
 
-    std::string column_name_angle = prm.get("column name angle");
+    this->column_name_angle = prm.get("column name angle");
 
     this->input_data.clear();
 
@@ -75,7 +75,7 @@ parse_parameters (dealii::ParameterHandler &prm)
     for (const auto &file : files)
     {
         boost::filesystem::path full_path = input_directory / file;
-        this->read_test_protocol (full_path.string(),column_name_angle);
+        this->read_test_protocol (full_path.string(),this->column_name_angle);
     }
     efilog(Verbosity::verbose) << "RotationalRheometer finished parsing "
                                   "parameters."
@@ -357,7 +357,7 @@ run (Sample<dim> &sample)
                             infilename.stem().string());
 
             io::CSVWriter<3> out(outfilename.string()); // TODO parametrize this
-            out.write_headers("time","angle","torque");
+            out.write_headers("time",this->column_name_angle,"torque");
             out.write_rows(times,angles,torques);
         }
     }

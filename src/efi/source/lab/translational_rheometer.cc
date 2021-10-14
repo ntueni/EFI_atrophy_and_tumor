@@ -69,14 +69,14 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     this->input_data.clear();
 
-    std::string column_name_displacement = prm.get("column name displacement");
+    this->column_name_displacement = prm.get("column name displacement");
 
     boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
 
     for (const auto &file : files)
     {
         boost::filesystem::path fullpath = input_directory / file; 
-        this->read_test_protocol (fullpath.string(),column_name_displacement);
+        this->read_test_protocol (fullpath.string(),this->column_name_displacement);
     }
         
 
@@ -291,7 +291,7 @@ run (Sample<dim> &sample)
                             infilename.stem().string());
 
             io::CSVWriter<3> out(outfilename.string());
-            out.write_headers("displacement","force","time");
+            out.write_headers(this->column_name_displacement,"force","time");
             out.write_rows(displacements,forces,times);
         }
 

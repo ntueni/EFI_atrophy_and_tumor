@@ -105,6 +105,7 @@ private:
     // flag for uniaxial test case
     bool is_uniaxial;
  
+    std::string column_name_displacement;
 };
 
 
