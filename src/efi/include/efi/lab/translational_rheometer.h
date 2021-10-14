@@ -58,7 +58,7 @@ public:
     /// The testing device is ran with the
     /// sample attached to it.
     void
-    run (Sample<dim> &sample,boost::filesystem::path outdir) final;
+    run (Sample<dim> &sample) final;
 
 private:
 
@@ -93,7 +93,7 @@ private:
 
     // Read the test protocol from a file.
     void
-    read_test_protocol (const std::string &filename);
+    read_test_protocol (const std::string &filename,const std::string & column_name_displacement);
 
     // Input data
     std::vector<InputData> input_data;

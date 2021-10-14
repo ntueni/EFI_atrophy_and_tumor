@@ -15,7 +15,7 @@
 // efi headers
 #include <efi/lab/experiment.h>
 #include <efi/lab/testing_device_factory.h>
-
+#include <efi/base/global_parameters.h>
 
 namespace efi {
 
@@ -33,7 +33,7 @@ declare_parameters (dealii::ParameterHandler &prm)
     prm.declare_entry ("output directory","",Patterns::Anything(),
             "options: set directory or leave blank for current directory");
 
-     prm.declare_entry ("input directory","",Patterns::Anything(),
+    prm.declare_entry ("input directory","",Patterns::Anything(),
             "options: set directory or leave blank for current directory");
 
     prm.declare_entry ("verbosity console","normal",
@@ -61,8 +61,8 @@ parse_parameters (dealii::ParameterHandler &prm)
         prm.get_bool("reset");
 
     // Set the path to the output directory
-    this->output_directory =
-        prm.get("output directory");
+    boost::filesystem::path output_directory =
+        GlobalParameters::get_output_directory();
         
     // .back() == this->output_directory.separator?
     //                 prm.get("output directory")
@@ -71,45 +71,10 @@ parse_parameters (dealii::ParameterHandler &prm)
     //                 + this->output_directory.separator
     //                 + "efi_v" + version() + "_" + time_stamp();
 
-    this->input_directory = 
-        prm.get("input directory");
-
     // Create the directories in the given path that do not exist yet
-    MPI::create_directories (this->output_directory,
+    MPI::create_directories (output_directory,
                              this->mpi_communicator);
-
-    std::string verbosity_console = prm.get ("verbosity console");
-    std::string verbosity_logfile = prm.get ("verbosity logfile");
-
-    if (efi::MPI::is_root (this->mpi_communicator))
-    {
-        std::string path_to_logfile = this->output_directory.string()
-                                    + this->output_directory.separator+"efi.log";
-
-        // the ofstream must be static to guarantee that is
-        // lives until the program terminates.
-        static std::ofstream logfile;
-
-        if (logfile.is_open())
-            logfile.close();
-
-        logfile.open(path_to_logfile, std::ios::out | std::ios::trunc);
-
-        AssertThrow(logfile.is_open(),ExcFileNotOpen(path_to_logfile));
-
-
-        deallog.depth_console (string_to_verbosity_level(verbosity_console));
-        deallog.depth_file(string_to_verbosity_level(verbosity_logfile));
-
-        dealii::deallog.attach (logfile);
-        print_efi_header(logfile);
-    }
-    else
-    {
-        deallog.depth_console (Verbosity::quiet);
-        deallog.depth_file    (Verbosity::quiet);
-    }
-
+    
     efilog(Verbosity::verbose) << "Experiment finished parsing parameters."
                                << std::endl;
 }
@@ -167,8 +132,6 @@ parse_input (std::string const &filename)
     // parameters.
     ParameterAcceptor::initialize (filename);
 
-    // Initialize the sample
-    this->sample->set_output_directory (this->output_directory.string());
     this->sample->initialize();
 
     // Write a copy of the used parameter file to the
@@ -177,13 +140,16 @@ parse_input (std::string const &filename)
     {
         //std::string stripped_filename = filename.substr(0,filename.rfind('.'));
 
+        boost::filesystem::path output_directory = 
+            GlobalParameters::get_output_directory();
+
         // Just a shortcut for the separator
         // in the file path
-        std::string sep (1,this->output_directory.separator);
+        std::string sep (1,output_directory.separator);
 
         // Get the paths of the output files
-        std::string path_prm  = this->output_directory.string() + sep + "parameter_file" + ".prm";
-        std::string path_json = this->output_directory.string() + sep + "parameter_file" + ".json";
+        std::string path_prm  = output_directory.string() + sep + "parameter_file" + ".prm";
+        std::string path_json = output_directory.string() + sep + "parameter_file" + ".json";
 
         // Open the filestreams
         std::ofstream output_txt  (path_prm);

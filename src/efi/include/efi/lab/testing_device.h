@@ -67,7 +67,7 @@ public:
     // sample attached to it.
     virtual
     void
-    run (Sample<dim> &sample,boost::filesystem::path outdir) = 0;
+    run (Sample<dim> &sample) = 0;
 
 protected:
 

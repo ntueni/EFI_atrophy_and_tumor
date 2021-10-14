@@ -11,7 +11,7 @@
             //"program": "${env:SPACK_ROOT}/var/spack/environments/efi/.spack-env/view/bin/mpirun",
             //"args": ["-np", "1", "vlab", "1" ,"efi_sim_best.prm"],
             "program": "${workspaceFolder}/build/efi_vlab",
-            "args": ["1" ,"test_neoHooke_hbe.prm"],
+            "args": ["1" ,"prm/test_neoHooke_hbe.prm"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/test",
             "environment": [],

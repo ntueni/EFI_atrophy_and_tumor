@@ -29,7 +29,7 @@
 #include <efi/grid/geometry.h>
 #include <efi/lab/translational_rheometer.h>
 #include <efi/worker/measure_data_worker.h>
-
+#include <efi/base/global_parameters.h>
 
 namespace efi {
 
@@ -47,6 +47,8 @@ declare_parameters (dealii::ParameterHandler &prm)
                     0,
                     Patterns::List::max_int_value,
                     ","));
+
+    prm.declare_entry("column name displacement","displacement");
 
     efilog(Verbosity::verbose) << "TranslationalRheometer finished declaring "
                                   "parameters."
@@ -67,8 +69,16 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     this->input_data.clear();
 
+    std::string column_name_displacement = prm.get("column name displacement");
+
+    boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
+
     for (const auto &file : files)
-        this->read_test_protocol (file);
+    {
+        boost::filesystem::path fullpath = input_directory / file; 
+        this->read_test_protocol (fullpath.string(),column_name_displacement);
+    }
+        
 
     efilog(Verbosity::verbose) << "TranslationalRheometer finished parsing "
                                   "parameters."
@@ -107,13 +117,13 @@ template <int dim>
 inline
 void
 TranslationalRheometer<dim>::
-read_test_protocol (const std::string &filename)
+read_test_protocol (const std::string &filename,const std::string & column_name_displacement)
 {
     using namespace dealii;
 
     io::CSVReader<2> in (filename);
 
-    in.read_header(io::ignore_extra_column,"time","angle");
+    in.read_header(io::ignore_extra_column,"time",column_name_displacement);
 
     this->input_data.emplace_back();
 
@@ -136,7 +146,7 @@ template <int dim>
 inline
 void
 TranslationalRheometer<dim>::
-run (Sample<dim> &sample, boost::filesystem::path outdir)
+run (Sample<dim> &sample)
 {
     using namespace dealii;
 
@@ -270,6 +280,8 @@ run (Sample<dim> &sample, boost::filesystem::path outdir)
         if (MPI::is_root(this->mpi_communicator))
         {
             boost::filesystem::path infilename  = input.filename;
+
+            boost::filesystem::path outdir = GlobalParameters::get_output_directory();
 
             boost::filesystem::path outfilename
                 = //infilename.parent_path()

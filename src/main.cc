@@ -27,9 +27,8 @@
 #include <efi/factory/registry.h>
 #include <efi/base/csv.h>
 #include <efi/base/gnuplot_stream.h>
+#include <efi/base/global_parameters.h>
 //#include <efi/base/parameter_modifier.h>
-
-
 
 int main (int argc, char *argv[]) {
 
@@ -47,9 +46,12 @@ int main (int argc, char *argv[]) {
         // print the registry
         Registry::print (efilog(Verbosity::normal));
 
+        std::string parameters (argv[2]);
+        init_global_parameters (parameters);
+
         Experiment<dim> experiment;
 
-        experiment.parse_input (std::string(argv[2]));
+        experiment.parse_input (parameters);
         experiment.run ();
 
     }

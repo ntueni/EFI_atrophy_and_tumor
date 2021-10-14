@@ -103,10 +103,6 @@ public:
     void
     reinit_constraints ();
 
-    // Set the output directory.
-    void
-    set_output_directory (const std::string &output_directory);
-
     // Return a constant reference to the
     // dof handler object. From the dof handler
     // the triangulation and the finite element
@@ -267,9 +263,6 @@ protected:
 
 private:
 
-    // output directory
-    boost::filesystem::path output_directory;
-
     // output times and names required
     // to write the *.pvd file.
     std::vector<std::pair<scalar_type,std::string>> times_and_names;
@@ -378,33 +371,6 @@ struct SampleFactory
 
 
 //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
-
-template <int dim>
-inline
-void
-Sample<dim>::
-set_output_directory (const std::string &output_directory)
-{
-    std::ostream*  tStream=NULL;
-    if (dealii::deallog.has_file())
-    {
-      tStream= &dealii::deallog.get_file_stream();
-    }else
-    {
-      tStream= &std::cout;
-    }
-    dealii::ConditionalOStream* oStr=new dealii::ConditionalOStream
-      (*tStream, MPI::is_root(this->mpi_communicator));
-    this->ccond.reset(oStr);
-    dealii::TimerOutput* tOut= new dealii::TimerOutput(this->mpi_communicator,*(this->ccond),
-      dealii::TimerOutput::summary, dealii::TimerOutput::cpu_and_wall_times );
-    this->timer.reset(tOut);
-    
-    Assert (boost::filesystem::exists (output_directory),
-            dealii::ExcMessage ("Path <" + output_directory + "> does not exist."));
-    this->output_directory = output_directory;
-}
-
 
 
 template <int dim>

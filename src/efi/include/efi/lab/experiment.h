@@ -91,11 +91,6 @@ private:
     /// must be convertible to @p int.
     std::map<int, std::unique_ptr<TestingDevice<dim>>, std::less<int>> devices;
 
-    // output directory
-    boost::filesystem::path output_directory;
-
-    boost::filesystem::path input_directory;
-
     bool reset;
 };
 
@@ -165,7 +160,7 @@ run ()
     {
         if(this->reset)
             this->sample->reset();
-        device.second->run(*(this->sample), this->output_directory);
+        device.second->run(*(this->sample));
     }
 }
 

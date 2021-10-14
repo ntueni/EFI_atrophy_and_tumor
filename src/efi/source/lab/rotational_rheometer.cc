@@ -29,7 +29,7 @@
 #include <efi/grid/geometry.h>
 #include <efi/lab/rotational_rheometer.h>
 #include <efi/worker/measure_data_worker.h>
-
+#include <efi/base/global_parameters.h>
 
 namespace efi {
 
@@ -48,6 +48,8 @@ declare_parameters (dealii::ParameterHandler &prm)
                     Patterns::List::max_int_value,
                     ","));
 
+    prm.declare_entry("column name angle","angle");
+
     efilog(Verbosity::verbose) << "RotationalRheometer finished declaring "
                                   "parameters."
                                << std::endl;
@@ -65,11 +67,16 @@ parse_parameters (dealii::ParameterHandler &prm)
     std::vector<std::string> files =
             Utilities::split_string_list(prm.get ("input files"),',');
 
+    std::string column_name_angle = prm.get("column name angle");
+
     this->input_data.clear();
 
+    boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
     for (const auto &file : files)
-        this->read_test_protocol (file);
-
+    {
+        boost::filesystem::path full_path = input_directory / file;
+        this->read_test_protocol (full_path.string(),column_name_angle);
+    }
     efilog(Verbosity::verbose) << "RotationalRheometer finished parsing "
                                   "parameters."
                                << std::endl;
@@ -107,16 +114,17 @@ template <int dim>
 inline
 void
 RotationalRheometer<dim>::
-read_test_protocol (const std::string &filename)
+read_test_protocol (const std::string &filename, const std::string &column_name_angle)
 {
     using namespace dealii;
 
     Assert (boost::filesystem::exists(boost::filesystem::path(filename)),
             ExcFileNotOpen (filename));
     
+    
     io::CSVReader<2> in (filename);
 
-    in.read_header(io::ignore_extra_column,"time","displacement");
+    in.read_header(io::ignore_extra_column,"time",column_name_angle);
 
     this->input_data.emplace_back();
 
@@ -191,7 +199,7 @@ template <int dim>
 inline
 void
 RotationalRheometer<dim>::
-run (Sample<dim> &sample,boost::filesystem::path outdir)
+run (Sample<dim> &sample)
 {
     using namespace dealii;
 
@@ -338,6 +346,8 @@ run (Sample<dim> &sample,boost::filesystem::path outdir)
         if (MPI::is_root(this->mpi_communicator))
         {
             boost::filesystem::path infilename  = input.filename;
+
+            boost::filesystem::path outdir = GlobalParameters::get_output_directory();
 
             boost::filesystem::path outfilename
                 = //infilename.parent_path()

@@ -25,7 +25,7 @@
 #include <efi/base/logstream.h>
 #include <efi/base/postprocessor.h>
 #include <efi/worker/scratch_data.h>
-
+#include <efi/base/global_parameters.h>
 
 namespace efi {
 
@@ -50,6 +50,22 @@ state (State::iterate)
 
     std::istringstream iss (unprocessed_input);
     this->instantiate (iss);
+
+    //TODO move this to a sparate function
+    std::ostream*  tStream=NULL;
+    if (dealii::deallog.has_file())
+    {
+      tStream= &dealii::deallog.get_file_stream();
+    }else
+    {
+      tStream= &std::cout;
+    }
+    dealii::ConditionalOStream* oStr=new dealii::ConditionalOStream
+      (*tStream, MPI::is_root(this->mpi_communicator));
+    this->ccond.reset(oStr);
+    dealii::TimerOutput* tOut= new dealii::TimerOutput(this->mpi_communicator,*(this->ccond),
+      dealii::TimerOutput::summary, dealii::TimerOutput::cpu_and_wall_times );
+    this->timer.reset(tOut);
 
     efilog(Verbosity::verbose) << "New Sample created ("+ subsection_name +")."
                                << std::endl;
@@ -176,6 +192,8 @@ run (const std::map<dealii::types::global_dof_index,double> &prescribed,
     // Set the time step size
     this->time_step_size = dt;
 
+    bool output_enabled = GlobalParameters::paraview_output_enabled();
+
     // All changes are written to a temporary
     // vector such that in case of failure, the
     // original data can be restored from
@@ -201,7 +219,8 @@ run (const std::map<dealii::types::global_dof_index,double> &prescribed,
     if (this->state == State::success)
     {
         this->elapsed_time += dt;
-        this->write_output(this->times_and_names.size(),this->elapsed_time);
+        if (output_enabled)
+            this->write_output(this->times_and_names.size(),this->elapsed_time);
         return true;
     }
     else
@@ -828,9 +847,12 @@ write_output (const unsigned int step,
     else
         out.build_patches();
 
+    boost::filesystem::path output_directory = 
+        GlobalParameters::get_output_directory();
+
     // output directory
-    std::string directory (this->output_directory.string()
-                         + std::string(1,this->output_directory.separator));
+    std::string directory (output_directory.string()
+                         + std::string(1,output_directory.separator));
 
     // common name of the output files
     std::string name ("dist_solution-"
