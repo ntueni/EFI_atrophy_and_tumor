@@ -345,16 +345,12 @@ run (Sample<dim> &sample)
 
         if (MPI::is_root(this->mpi_communicator))
         {
-            boost::filesystem::path infilename  = input.filename;
+            boost::filesystem::path infilepath  = input.filename;
 
             boost::filesystem::path outdir = GlobalParameters::get_output_directory();
 
             boost::filesystem::path outfilename
-                = //infilename.parent_path()
-                    ///
-                    outdir /
-                    boost::filesystem::path(
-                            infilename.stem().string());
+                = outdir / infilepath.filename();
 
             io::CSVWriter<3> out(outfilename.string()); // TODO parametrize this
             out.write_headers("time",this->column_name_angle,"torque");
