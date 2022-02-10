@@ -111,11 +111,15 @@ create (const std::string& type_str,
 
         return make_new_if_constructible<geometry_type>(std::forward<Args>(args)...);
     }
+    else if (type_str == "import")
+    {
+        using geometry_type = ImportedGeometry<dim>;
+
+        return make_new_if_constructible<geometry_type>(std::forward<Args>(args)...);
+    }
     else
         AssertThrow (false, ExcNotConstructible ());
 }
-
-
 
 template <int dim>
 inline
@@ -134,7 +138,7 @@ std::string
 GeometryFactory<dim>::
 get_names ()
 {
-    return "block|cylinder";
+    return "block|cylinder|import";
 }
 
 }//namespace efi

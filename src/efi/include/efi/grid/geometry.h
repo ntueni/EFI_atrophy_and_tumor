@@ -236,6 +236,44 @@ protected:
     double relative_max_element_size;
 };
 
+/// Geometric description of an imported geometery. 
+/// Utilizing  dealii GridGenerator::GridIn function.
+/// @author Stefan Kaessmair
+template <int dim>
+class ImportedGeometry : public Geometry<dim>
+{
+public:
+
+    /// Constructor.
+    /// @param[in] subsection_name The name of the subsection in the parameter
+    /// file which defines the parameters of the present class instance.
+    /// @param[in] unprocessed_input The unprocessed parts of the parameter
+    /// file is everything between the begin of the corresponding subsection
+    /// of the to-be-constructed 
+    ImportedGeometry (const std::string &subsection_name,
+              const std::string &unprocessed_input);
+
+    /// Destructor.
+    virtual
+    ~ImportedGeometry () = default;
+
+    /// Create a triangulation of the imported geometry. 
+    virtual
+    void
+    create_triangulation (dealii::Triangulation<dim> &tria) override;
+
+    /// Accept a visitor.
+    virtual
+    void
+    accept (GeometryVisitor<dim> &) const override;
+
+    protected:
+
+    std::string
+    inpFile;
+
+    void printMeshInformation(const dealii::Triangulation<dim> &) const;
+};
 
 
 /// Visitor class for geometry objects. This class is particular useful for
@@ -262,7 +300,14 @@ public:
     virtual
     void
     visit (const Cylinder<dim> &) = 0;
+
+    /// Visit a @p Import geometry object.
+    virtual
+    void
+    visit (const ImportedGeometry<dim> &) = 0;
 };
+
+
 
 
 
@@ -278,7 +323,6 @@ Geometry (const std::string &subsection_name,
 :
     dealii::ParameterAcceptor (subsection_name)
 { }
-
 
 
 template <int dim>
@@ -361,6 +405,44 @@ get_height () const
 {
     return this->height;
 }
+
+template <int dim>
+inline
+void
+ImportedGeometry<dim>::
+accept (GeometryVisitor<dim> &v) const
+{
+    v.visit(*this);
+}
+
+/// Function to give mesh information for an imported geometry.
+/// Taken from deal.ii step-49 tutorial
+template <int dim>
+inline
+void
+ImportedGeometry<dim>::
+printMeshInformation (const dealii::Triangulation<dim> &triangulation) const
+{
+    std::cout << "Mesh info:" << std::endl
+            << " dimension: " << dim << std::endl
+            << " no. of cells: " << triangulation.n_active_cells() << std::endl;
+
+            {
+    std::map<dealii::types::boundary_id, unsigned int> boundary_count;
+    for (const auto &face : triangulation.active_face_iterators())
+      if (face->at_boundary())
+        boundary_count[face->boundary_id()]++;
+
+    std::cout << " boundary indicators: ";
+    for (const std::pair<const dealii::types::boundary_id, unsigned int> &pair :
+         boundary_count)
+      {
+        std::cout << pair.first << "(" << pair.second << " times) ";
+      }
+    std::cout << std::endl;
+  }
+}
+
 
 
 }// namespace efi

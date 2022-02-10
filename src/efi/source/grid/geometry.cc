@@ -21,12 +21,14 @@
 
 // deal.II headers
 #include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_in.h>
 
 // efi headers
 #include <efi/base/logstream.h>
 #include <efi/grid/geometry.h>
 #include <efi/factory/registry.h>
 #include <efi/lab/sample.h>
+#include <efi/base/global_parameters.h>
 
 namespace efi {
 
@@ -256,6 +258,79 @@ parse_parameters (dealii::ParameterHandler &param)
 }
 
 
+template <int dim>
+inline
+Cylinder<dim>::
+Cylinder (const std::string &subsection_name,
+          const std::string &unprocessed_input)
+:
+    Geometry<dim> (subsection_name, unprocessed_input),
+    radius (.5),
+    height (1.),
+    relative_max_element_size (1.)
+{
+    using namespace dealii;
+
+    this->add_parameter("radius", this->radius, "", ParameterAcceptor::prm,
+            Patterns::Double(std::nextafter(0.,1.)));
+    this->add_parameter("height", this->height, "", ParameterAcceptor::prm,
+            Patterns::Double(std::nextafter(0.,1.)));
+    this->add_parameter("relative maxium element size",
+            this->relative_max_element_size,
+            "Maximum allowed element size relative to the radius in (0,1].",
+            ParameterAcceptor::prm,
+            Patterns::Double(std::nextafter(0.,1.),1.));
+
+    efilog(Verbosity::verbose) << "New Cylinder created ("
+                               << subsection_name
+                               << ")." << std::endl;
+}
+
+template <int dim>
+inline
+ImportedGeometry<dim>::
+ImportedGeometry (const std::string &subsection_name,
+          const std::string &unprocessed_input)
+:
+    Geometry<dim> (subsection_name, unprocessed_input)
+{
+    using namespace dealii;
+
+    this->add_parameter("inpFile", this->inpFile, "", ParameterAcceptor::prm,
+            true);
+
+    efilog(Verbosity::verbose) << "New Geometry imported ("
+                               << subsection_name
+                               << ")." << std::endl;
+}
+
+
+template <int dim>
+inline
+void
+ImportedGeometry<dim>::
+create_triangulation (dealii::Triangulation<dim> &tria)
+{
+        std::string inputFileName = this->inpFile.toString();
+
+        boost::filesystem::path input_directory = 
+            GlobalParameters::get_input_directory();
+
+        // Just a shortcut for the separator
+        // in the file path
+        std::string sep (1,input_directory.separator);
+
+        // Get the paths of the output files
+        std::string path_inp  = input_directory.string() + sep + inputFileName;
+ 
+        std::ifstream istream(path_inp);
+        dealii::GridIn<dim> gridIn;
+        gridIn.attach_triangulation(tria);
+        gridIn.read_ucd(istream);
+
+        this->printMeshInformation(tria);
+}
+
 
 // Instantiation
 template class Block<2>;
@@ -264,12 +339,18 @@ template class Block<3>;
 template class Cylinder<2>;
 template class Cylinder<3>;
 
+template class ImportedGeometry<2>;
+template class ImportedGeometry<3>;
+
 // Registration
 EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Block,2));
 EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Block,3));
 
 EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Cylinder,2));
 EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Cylinder,3));
+
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ImportedGeometry,2));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ImportedGeometry,3));
 
 }// namespace efi
 

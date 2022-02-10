@@ -79,6 +79,7 @@ protected:
 
         void visit (const Block<dim> &) final;
         void visit (const Cylinder<dim> &) final;
+        void visit (const ImportedGeometry<dim> &) final;
     };
 
     // Make the constraints required by the used
@@ -143,6 +144,15 @@ visit (const Cylinder<dim> &)
         this->values[d] = true;
 }
 
+
+template <int dim>
+void
+TestingDevice<dim>::IsReflectionSymmetric::
+visit (const ImportedGeometry<dim> &)
+{
+    for (unsigned int d = 0; d < dim; ++d)
+        this->values[d] = false;
+}
 
 
 }// namespace efi

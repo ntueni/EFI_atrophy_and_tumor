@@ -83,6 +83,7 @@ private:
 
         void visit (const Block<dim> &) final;
         void visit (const Cylinder<dim> &) final;
+        void visit (const ImportedGeometry<dim> &) final;
     };
 
     // Make the constraints required by the used
@@ -136,6 +137,15 @@ template <int dim>
 void
 TranslationalRheometer<dim>::GetConstrainedBoundaryIDs::
 visit (const Cylinder<dim> &)
+{
+    this->homogeneous = 1;
+    this->inhomogeneous = 2;
+}
+
+template <int dim>
+void
+TranslationalRheometer<dim>::GetConstrainedBoundaryIDs::
+visit (const ImportedGeometry<dim> &)
 {
     this->homogeneous = 1;
     this->inhomogeneous = 2;

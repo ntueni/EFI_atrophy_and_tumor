@@ -52,7 +52,7 @@ int main (int argc, char *argv[]) {
         Experiment<dim> experiment;
 
         experiment.parse_input (parameters);
-        experiment.run ();
+        // experiment.run ();
 
     }
     catch (std::exception &exec)
