@@ -1,0 +1,59 @@
+subsection experiment
+  set reset = true
+
+  subsection testing_device@[type=tension_compression_testing_device,instance=1]
+    set input files = tension_c3
+  end
+
+  subsection sample
+
+    subsection finite element
+      set polynomial degree = 2
+    end
+
+    subsection geometry@[type=import]
+      set inpFile = fullBrainCleaned.inp
+    end
+
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=1]
+          set alpha = -20
+          set bulk modulus = 3.e3
+          set empirical coefficient = -2.
+          set mu = 0.7e3
+    end
+    
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=2]
+          set alpha = -20
+          set bulk modulus = 3.e3
+          set empirical coefficient = -2.
+          set mu = 0.7e3
+    end
+
+    subsection nonlinear_solver_control
+      set absolute tolerance = 1e-10
+      set linear solver type = CG
+      set maximum number of iterations = 50
+      set relative tolerance = 1e-08
+    end
+
+    subsection quadrature
+      set quadrature points per space direction = auto
+      set quadrature type = gauss
+    end
+  end
+
+end
+
+subsection global
+  set output directory = /calculate/efiSim1F/build/out
+
+  set input directory  = /calculate/efiSim1F/build/in
+
+  set paraview output = true
+
+  # options: quiet|normal|verbose|very verbose|debug
+  set verbosity console = debug
+
+  # options: quiet|normal|verbose|very verbose|debug
+  set verbosity logfile = normal
+end
