@@ -246,6 +246,13 @@ instantiate (std::istream &unprocessed_input)
     = [&] (const FactoryTools::Specifications &specs,
            const std::string                  &unprocessed_input) -> void
     {
+
+        int material_id = specs.get_integer("material_id");
+        std::string type = specs.get("type");
+
+        efilog(Verbosity::quiet) << "Type: " << type << std::endl;
+        efilog(Verbosity::quiet) << "Material_id: " << material_id << std::endl;
+        
         this->constitutive_model.reset (
                 ConstitutiveFactory<dim>::create (
                         this->get_section_path(), specs, unprocessed_input));

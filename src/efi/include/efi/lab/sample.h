@@ -263,7 +263,7 @@ protected:
     std::unique_ptr<ConstitutiveBase<dim>> constitutive_model;
 
     // constitutive model
-    std:map<int, std::unique_ptr<ConstitutiveBase<dim>>> constitutive_model_map;
+    std::map<int, std::unique_ptr<ConstitutiveBase<dim>>> constitutive_model_map;
 
     // geometry
     std::unique_ptr<Geometry<dim>> geometry;
