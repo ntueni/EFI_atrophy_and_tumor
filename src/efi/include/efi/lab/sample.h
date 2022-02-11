@@ -122,6 +122,10 @@ public:
     const ConstitutiveBase<dim> &
     get_constitutive_model () const;
 
+    // Return a constant reference to the used constitutive model when given material_id.
+    const ConstitutiveBase<dim> &
+    get_constitutive_model (int) const;
+
     /// Create a mesh loop using the @p Sample data structures and
     /// connect it to the given signal.
     /// This function uses @p constitutive_model as data processor for
@@ -257,6 +261,9 @@ protected:
 
     // constitutive model
     std::unique_ptr<ConstitutiveBase<dim>> constitutive_model;
+
+    // constitutive model
+    std:map<int, std::unique_ptr<ConstitutiveBase<dim>>> constitutive_model_map;
 
     // geometry
     std::unique_ptr<Geometry<dim>> geometry;
@@ -418,6 +425,16 @@ get_constitutive_model () const
     return *(this->constitutive_model);
 }
 
+
+template <int dim>
+inline
+const ConstitutiveBase<dim>&
+Sample<dim>::
+get_constitutive_model (int material_id) const
+{
+    Assert (this->constitutive_model, dealii::ExcNotInitialized());
+    return *(this->constitutive_model_map.at(material_id));
+}
 
 
 template <int dim>
