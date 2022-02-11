@@ -258,33 +258,6 @@ parse_parameters (dealii::ParameterHandler &param)
 }
 
 
-template <int dim>
-inline
-Cylinder<dim>::
-Cylinder (const std::string &subsection_name,
-          const std::string &unprocessed_input)
-:
-    Geometry<dim> (subsection_name, unprocessed_input),
-    radius (.5),
-    height (1.),
-    relative_max_element_size (1.)
-{
-    using namespace dealii;
-
-    this->add_parameter("radius", this->radius, "", ParameterAcceptor::prm,
-            Patterns::Double(std::nextafter(0.,1.)));
-    this->add_parameter("height", this->height, "", ParameterAcceptor::prm,
-            Patterns::Double(std::nextafter(0.,1.)));
-    this->add_parameter("relative maxium element size",
-            this->relative_max_element_size,
-            "Maximum allowed element size relative to the radius in (0,1].",
-            ParameterAcceptor::prm,
-            Patterns::Double(std::nextafter(0.,1.),1.));
-
-    efilog(Verbosity::verbose) << "New Cylinder created ("
-                               << subsection_name
-                               << ")." << std::endl;
-}
 
 template <int dim>
 inline
@@ -297,7 +270,7 @@ ImportedGeometry (const std::string &subsection_name,
     using namespace dealii;
 
     this->add_parameter("inpFile", this->inpFile, "", ParameterAcceptor::prm,
-            true);
+            Patterns::Anything());
 
     efilog(Verbosity::verbose) << "New Geometry imported ("
                                << subsection_name
@@ -311,7 +284,7 @@ void
 ImportedGeometry<dim>::
 create_triangulation (dealii::Triangulation<dim> &tria)
 {
-        std::string inputFileName = this->inpFile.toString();
+        std::string inputFileName = this->inpFile;
 
         boost::filesystem::path input_directory = 
             GlobalParameters::get_input_directory();
@@ -325,6 +298,7 @@ create_triangulation (dealii::Triangulation<dim> &tria)
  
         std::ifstream istream(path_inp);
         dealii::GridIn<dim> gridIn;
+        std::cout << path_inp << std::endl;
         gridIn.attach_triangulation(tria);
         gridIn.read_ucd(istream);
 
