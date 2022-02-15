@@ -12,21 +12,19 @@ subsection experiment
     end
 
     subsection geometry@[type=import]
-      set inpFile = fullBrainCleaned.inp
+      set inpFile = cylinderUCD.inp
     end
 
-    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=1]
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=0]
           set alpha = -20
           set bulk modulus = 3.e3
           set empirical coefficient = -2.
           set mu = 0.7e3
     end
-    
-    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=2]
-          set alpha = -20
-          set bulk modulus = 3.e3
-          set empirical coefficient = -2.
-          set mu = 0.7e3
+
+    subsection constitutive@[type=neo_hooke,instance=1,material_id=5]
+          set young's modulus = 2.0e5
+          set poisson ratio = 0.4
     end
 
     subsection nonlinear_solver_control

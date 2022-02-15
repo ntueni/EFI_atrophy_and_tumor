@@ -250,6 +250,7 @@ mesh_loop(
 {
     using dealii::MeshWorker::AssembleFlags;
 
+
   Assert(
     (!cell_worker) == !(flags & dealii::MeshWorker::work_on_cells),
     dealii::ExcMessage(
@@ -283,6 +284,7 @@ mesh_loop(
     dealii::ExcMessage(
       "If you specify a boundary_worker, assemble_boundary_faces needs to be set."));
 
+
   auto cell_action = [&](const CellIteratorBaseType &cell,
                          ScratchData &               scratch,
                          CopyData &                  copy) {
@@ -313,6 +315,7 @@ mesh_loop(
       cell_worker(cell, scratch, copy);
 
     if (flags & (dealii::MeshWorker::work_on_faces | dealii::MeshWorker::work_on_boundary))
+      {
       for (unsigned int face_no = 0;
            face_no < dealii::GeometryInfo<CellIteratorBaseType::AccessorType::
                                     Container::dimension>::faces_per_cell;
@@ -464,13 +467,14 @@ mesh_loop(
                 }
             }
         } // faces
-
+      }
     // Execute the cell_worker if faces are handled before cells
     if ((flags & dealii::MeshWorker::cells_after_faces) &&
         (((flags & dealii::MeshWorker::assemble_own_cells) && own_cell) ||
          ((flags & dealii::MeshWorker::assemble_ghost_cells) && !own_cell)))
       cell_worker(cell, scratch, copy);
   };
+
 
   // Submit to workstream
   dealii::WorkStream::run(begin,
@@ -481,6 +485,7 @@ mesh_loop(
                   sample_copy_data,
                   queue_length,
                   chunk_size);
+
 }
 
 /**

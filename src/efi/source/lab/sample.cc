@@ -15,6 +15,7 @@
 // deal.II headers
 #include <deal.II/base/path_search.h>
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/grid/filtered_iterator.h>
 //#include <deal.II/meshworker/mesh_loop.h>
 
 // efi headers
@@ -252,6 +253,12 @@ instantiate (std::istream &unprocessed_input)
 
         efilog(Verbosity::quiet) << "Type: " << type << std::endl;
         efilog(Verbosity::quiet) << "Material_id: " << material_id << std::endl;
+
+        this->constitutive_model_map.emplace (
+                specs.get_integer("material_id"),
+                ConstitutiveFactory<dim>::create (
+                        this->get_section_path(), specs, unprocessed_input));
+
         
         this->constitutive_model.reset (
                 ConstitutiveFactory<dim>::create (
@@ -314,6 +321,7 @@ initialize ()
     Assert (this->constitutive_model, ExcNotInitialized ());
     Assert (this->geometry,           ExcNotInitialized ());
     Assert (this->mapping,            ExcNotInitialized ());
+
 
     // After we have gathered all information
     // create the copy and scratch data objects.
@@ -528,8 +536,6 @@ reinit_sparsity ()
                                << std::endl;
 }
 
-
-
 template <int dim>
 void
 Sample<dim>::
@@ -549,9 +555,35 @@ assemble ()
     system_matrix = 0;
     system_vector = 0;
 
-
+    
     using CellIteratorType = decltype(this->dof_handler.begin_active());
 
+    std::vector<unsigned int> material_ids = {0,5};
+
+    for (unsigned int matId : material_ids)
+    {
+
+        IteratorFilters::MaterialIdEqualTo materialFilter(matId);
+        FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
+        cell(materialFilter),
+        endc(materialFilter,this->dof_handler.end());
+        
+        cell.set_to_next_positive(this->dof_handler.begin_active());
+
+        CellIteratorType begin = cell.set_to_next_positive(this->dof_handler.begin_active());
+        typename dealii::identity<CellIteratorType>::type end = endc;
+        
+        // set scratch data and copier data flags to associate with current material model
+        this->sample_scratch_data.reset (new ScratchData<dim> (
+            *(this->mapping),
+            *(this->fe),
+            *(this->qf_cell),
+              this->cell_worker->get_needed_update_flags ()
+            | this->constitutive_model_map.at(cell->material_id())->get_needed_update_flags (),
+            *(this->qf_face),
+              this->boundary_worker->get_needed_update_flags ()));
+
+    // Loop over material types and set up system?
     auto cell_woker =
             [&](const CellIteratorType &cell,
                 ScratchData<dim>       &scratch_data,
@@ -562,7 +594,7 @@ assemble ()
                     try
                     {
                         this->cell_worker->fill (
-                              *(this->constitutive_model),
+                              *(this->constitutive_model_map.at(cell->material_id())),
                                 this->locally_relevant_solution,
                                 cell,
                                 scratch_data,
@@ -575,6 +607,7 @@ assemble ()
                                                   << std::endl;
                     }
                 };
+
 
     auto boundary_woker =
             [&](const CellIteratorType &cell,
@@ -608,8 +641,7 @@ assemble ()
                         this->state,
                         this->constraints);
 
-    mesh_loop (this->dof_handler.begin_active(),
-               this->dof_handler.end(),
+    mesh_loop (begin, end,
                cell_woker,
                copier,
                *(this->sample_scratch_data),
@@ -618,7 +650,7 @@ assemble ()
              | MeshWorker::assemble_boundary_faces,
                boundary_woker);
 
-
+    }
     // Perform all reduce the state such that the state
     // is consistent for all processors.
     this->all_reduce_state ();

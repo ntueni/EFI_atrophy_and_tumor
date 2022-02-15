@@ -143,8 +143,8 @@ void
 Nanoindenter<dim>::GetConstrainedBoundaryIDs::
 visit (const ImportedGeometry<dim> &)
 {
-    this->homogeneous = 1;
-    this->inhomogeneous = 2;
+    this->homogeneous = 2;
+    this->inhomogeneous = 1;
 }
 
 }//namespace efi

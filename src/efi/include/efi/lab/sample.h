@@ -124,7 +124,7 @@ public:
 
     // Return a constant reference to the used constitutive model when given material_id.
     const ConstitutiveBase<dim> &
-    get_constitutive_model (int) const;
+    get_constitutive_model (const int) const;
 
     /// Create a mesh loop using the @p Sample data structures and
     /// connect it to the given signal.
@@ -425,16 +425,6 @@ get_constitutive_model () const
     return *(this->constitutive_model);
 }
 
-
-template <int dim>
-inline
-const ConstitutiveBase<dim>&
-Sample<dim>::
-get_constitutive_model (int material_id) const
-{
-    Assert (this->constitutive_model, dealii::ExcNotInitialized());
-    return *(this->constitutive_model_map.at(material_id));
-}
 
 
 template <int dim>
