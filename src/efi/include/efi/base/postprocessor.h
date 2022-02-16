@@ -183,7 +183,11 @@ class CellDataPostProcessor : public PostProcessorBase<dim>
 public:
 
     // Constructor.
-    CellDataPostProcessor (const ConstitutiveBase<dim> &model,
+    // CellDataPostProcessor (const ConstitutiveBase<dim> &model,
+    //                        const GeneralCellDataStorage* cell_data_storage = nullptr);
+
+    // Overloaded Constructor.
+    CellDataPostProcessor (const std::map<int,std::unique_ptr<ConstitutiveBase<dim>>> &model_map,
                            const GeneralCellDataStorage* cell_data_storage = nullptr);
 
     // Destructor.
@@ -199,8 +203,11 @@ public:
 
 protected:
 
-    // Reference to the constitutive model
-    const ConstitutiveBase<dim>& constitutive_model;
+    // // Reference to the constitutive model
+    // const ConstitutiveBase<dim>* constitutive_model;
+
+    // Reference to the constitutive model map
+    const std::map<int,std::unique_ptr<ConstitutiveBase<dim>>> & constitutive_model_map;
 
     // Pointer to a cell_data_storage, which provides additional
     // information when postprocessing the single cells.

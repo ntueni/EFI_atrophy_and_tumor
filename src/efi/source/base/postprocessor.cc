@@ -54,37 +54,80 @@ DataInterpretation (const std::string &name,
 
 
 
+// template <int dim>
+// CellDataPostProcessor<dim>::
+// CellDataPostProcessor (const ConstitutiveBase<dim>* model,
+//                        const GeneralCellDataStorage* cell_data_storage)
+// : constitutive_model (model),
+//   cell_data_storage (cell_data_storage)
+// {
+    
+//     using namespace dealii;
+
+//     this->update_flags = update_values | update_quadrature_points;
+
+//     auto data_interpretation = constitutive_model->get_data_interpretation ();
+//     this->update_flags = this->update_flags | constitutive_model->get_needed_update_flags ();
+
+//     unsigned int first_component = 0;
+
+//     for (auto &info :  data_interpretation)
+//     {
+//         first_component += info.n_components ();
+//         this->names.insert (
+//             std::end(this->names),
+//             std::begin(info.get_names ()),
+//             std::end(info.get_names ()));
+
+//         this->data_component_interpretation.insert (
+//             std::end(this->data_component_interpretation),
+//             std::begin(info.get_data_component_interpretation ()),
+//             std::end(info.get_data_component_interpretation ()));
+//     }
+// }
+
 template <int dim>
 CellDataPostProcessor<dim>::
-CellDataPostProcessor (const ConstitutiveBase<dim> &model,
+CellDataPostProcessor (const std::map<int,std::unique_ptr<ConstitutiveBase<dim>>>& model_map,
                        const GeneralCellDataStorage* cell_data_storage)
-: constitutive_model (model),
-  cell_data_storage (cell_data_storage)
+: constitutive_model_map(model_map),
+cell_data_storage (cell_data_storage)
 {
     using namespace dealii;
 
     this->update_flags = update_values | update_quadrature_points;
 
-    auto data_interpretation = constitutive_model.get_data_interpretation ();
-    this->update_flags = this->update_flags | constitutive_model.get_needed_update_flags ();
-
-    unsigned int first_component = 0;
-
-    for (auto &info :  data_interpretation)
+    for (const auto &cm_pair : constitutive_model_map)
     {
-        first_component += info.n_components ();
-        this->names.insert (
-            std::end(this->names),
-            std::begin(info.get_names ()),
-            std::end(info.get_names ()));
+        // ConstitutiveBase<dim> *constitutive_m = &(cm_pair.second);
+        auto data_interpretation = cm_pair.second->get_data_interpretation ();
+        this->update_flags = this->update_flags | cm_pair.second->get_needed_update_flags ();
 
-        this->data_component_interpretation.insert (
-            std::end(this->data_component_interpretation),
-            std::begin(info.get_data_component_interpretation ()),
-            std::end(info.get_data_component_interpretation ()));
+        unsigned int first_component = 0;
+
+        for (auto &info :  data_interpretation)
+        {
+            first_component += info.n_components ();
+
+            for (auto name: info.get_names ())
+            {
+                if (!std::count(this->names.begin(), this->names.end(), name))
+                {
+                this->names.insert (
+                    std::end(this->names),
+                    std::begin(info.get_names ()),
+                    std::end(info.get_names ()));
+
+                this->data_component_interpretation.insert (
+                    std::end(this->data_component_interpretation),
+                    std::begin(info.get_data_component_interpretation ()),
+                    std::end(info.get_data_component_interpretation ()));
+                }
+            }
+            
+        }
     }
 }
-
 
 
 template <int dim>
@@ -101,13 +144,15 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> & inpu
 
     const GeneralDataStorage *additional_input_data = nullptr;
 
+    auto cell = input_data.template get_cell<DoFHandler<dim>>();
+    int material_id = cell->material_id();
     if (this->cell_data_storage != nullptr)
     {
-        auto cell = input_data.template get_cell<DoFHandler<dim>>();
         additional_input_data = &(this->cell_data_storage->get_data (cell));
     }
+    
 
-    this->constitutive_model.evaluate_vector_field (
+    this->constitutive_model_map.at(material_id)->evaluate_vector_field (
             input_data, computed_quantities, additional_input_data);
 }
 

@@ -16,6 +16,7 @@
 #include <deal.II/base/path_search.h>
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/grid/filtered_iterator.h>
+#include <deal.II/base/parameter_handler.h>
 //#include <deal.II/meshworker/mesh_loop.h>
 
 // efi headers
@@ -323,6 +324,22 @@ initialize ()
     Assert (this->mapping,            ExcNotInitialized ());
 
 
+
+    int count = 0;
+    dealii::UpdateFlags updateFlags;
+    for (const auto & cm: this->constitutive_model_map)
+    {
+        if (count == 0)
+            {
+            updateFlags = cm.second->get_needed_update_flags ();
+            count++;
+            }
+        else
+        {
+            updateFlags = updateFlags | cm.second->get_needed_update_flags ();
+        }
+    }
+
     // After we have gathered all information
     // create the copy and scratch data objects.
     this->sample_copy_data.reset (new CopyData ());
@@ -331,7 +348,7 @@ initialize ()
             *(this->fe),
             *(this->qf_cell),
               this->cell_worker->get_needed_update_flags ()
-            | this->constitutive_model->get_needed_update_flags (),
+            | updateFlags,
             *(this->qf_face),
               this->boundary_worker->get_needed_update_flags ()));
 
@@ -573,15 +590,9 @@ assemble ()
         CellIteratorType begin = cell.set_to_next_positive(this->dof_handler.begin_active());
         typename dealii::identity<CellIteratorType>::type end = endc;
         
-        // set scratch data and copier data flags to associate with current material model
-        this->sample_scratch_data.reset (new ScratchData<dim> (
-            *(this->mapping),
-            *(this->fe),
-            *(this->qf_cell),
-              this->cell_worker->get_needed_update_flags ()
-            | this->constitutive_model_map.at(cell->material_id())->get_needed_update_flags (),
-            *(this->qf_face),
-              this->boundary_worker->get_needed_update_flags ()));
+        // /update scratch data UpdateFlags to associate with current material model
+        // this->sample_scratch_data.set_update_flags(this->constitutive_model_map.at(cell->material_id())->get_needed_update_flags ())
+
 
     // Loop over material types and set up system?
     auto cell_woker =
@@ -863,7 +874,7 @@ write_output (const unsigned int step,
     // has to survive longer. Otherwise an
     // error will be thrown in Debug mode.
     CellDataPostProcessor<dim> post_processor (
-            *(this->constitutive_model),this->cell_data_history_storage.get ());
+            this->constitutive_model_map,this->cell_data_history_storage.get ());
 
     // setup the data out object
     DataOut<dim> out;

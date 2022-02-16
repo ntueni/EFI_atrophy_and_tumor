@@ -14,23 +14,24 @@ subsection experiment
     subsection geometry@[type=import]
       set inpFile = cylinderUCD.inp
     end
+    
+    subsection constitutive@[type=neo_hooke,instance=1,material_id=0]
+          set young's modulus = 2.1e3
+          set poisson ratio = 0.35
+    end   
+    
 
-    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=0]
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=5]
           set alpha = -20
           set bulk modulus = 3.e3
           set empirical coefficient = -2.
           set mu = 0.7e3
-    end
-
-    subsection constitutive@[type=neo_hooke,instance=1,material_id=5]
-          set young's modulus = 2.0e5
-          set poisson ratio = 0.4
-    end
+    end 
 
     subsection nonlinear_solver_control
       set absolute tolerance = 1e-10
       set linear solver type = CG
-      set maximum number of iterations = 50
+      set maximum number of iterations = 10
       set relative tolerance = 1e-08
     end
 
