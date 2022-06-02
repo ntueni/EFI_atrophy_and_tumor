@@ -306,9 +306,13 @@ create_assembly_data_copier (VectorType &vec,
                     {
                         // Check if all numbers in the vectors
                         // are finite. If not throw an error.
+
                         for(auto &value : copy_data.vectors[i])
-                            AssertThrow (dealii::numbers::is_finite(value),
+                            {
+                                // std::cout << "VALUE:  " << value << std::endl;
+                                AssertThrow (dealii::numbers::is_finite(value),
                                          dealii::ExcNumberNotFinite(value));
+                            }
 
                         constraints.distribute_local_to_global(
                                 copy_data.matrices[i],
@@ -323,6 +327,12 @@ create_assembly_data_copier (VectorType &vec,
                     state = dealii::SolverControl::State::failure;
                     efilog(Verbosity::normal) << "Copier failed."
                                               << std::endl;
+                    efilog(Verbosity::normal) << exec.what()
+                                              << std::endl;
+                    efilog(Verbosity::normal) << "Copier failed."
+                    << std::endl;
+                    state = dealii::SolverControl::State::failure;
+                    return;
                 }
             };
 }

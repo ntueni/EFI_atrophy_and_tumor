@@ -54,6 +54,11 @@ public:
     boost::filesystem::path
     get_output_directory ();
 
+    /// Return the output directory as string
+    static
+    std::string
+    get_output_filename ();
+
     // boost::filesystem::path
     // get_output_directory ();
 
@@ -69,6 +74,10 @@ public:
     static
     bool
     paraview_output_enabled ();
+
+    static
+    bool
+    contact_enabled ();
 
     /// Destructor.
     ~GlobalParameters ();
@@ -104,6 +113,8 @@ private:
 
     boost::filesystem::path output_path;
     boost::filesystem::path input_path;
+    std::string output_filename;
+    bool apply_contact;
 
     /// MPI communicator
     MPI_Comm mpi_communicator;

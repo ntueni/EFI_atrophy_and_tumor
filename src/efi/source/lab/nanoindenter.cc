@@ -177,7 +177,7 @@ run (Sample<dim> &sample)
     auto torque_copier = torque_worker.create_copier (torque);
 
     auto connection_torque = sample.connect_boundary_loop (
-                                       sample.get_constitutive_model(),
+                                       sample.get_constitutive_model(0),
                                        torque_worker,
                                        torque_copier,
                                        sample.signals.post_nonlinear_solve);

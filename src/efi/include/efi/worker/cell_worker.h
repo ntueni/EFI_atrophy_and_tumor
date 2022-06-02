@@ -223,8 +223,13 @@ fill (const DataProcessor     &data_processor,
 
     // Compute the constitutive response
     // at the quadrature points.
-    data_processor.evaluate (scratch_data);
-
+    data_processor.evaluate (scratch_data); 
+    // if (cell->id().to_string() == "90293_0:")
+    // {
+    //     std::cout << "Same cell as boundary 5" << std::endl;
+    //     std::cout  << "solution here is at dof 228123 is " 
+    //         << fe_function(228123) << std::endl;
+    // }
     // Now, do the actual job.
     this->do_fill (scratch_data,copy_data);
 }

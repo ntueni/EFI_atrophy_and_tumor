@@ -170,7 +170,7 @@ run (Sample<dim> &sample)
     auto force_copier = force_worker.create_copier (force);
 
     auto connection_force = sample.connect_boundary_loop (
-                                       sample.get_constitutive_model(),
+                                       sample.get_constitutive_model(0),
                                        force_worker,
                                        force_copier,
                                        sample.signals.post_nonlinear_solve);

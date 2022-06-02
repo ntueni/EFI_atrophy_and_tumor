@@ -28,7 +28,9 @@
 #include <efi/base/csv.h>
 #include <efi/base/gnuplot_stream.h>
 #include <efi/base/global_parameters.h>
+#include <efi/grid/obstacle.h>
 //#include <efi/base/parameter_modifier.h>
+
 
 int main (int argc, char *argv[]) {
 

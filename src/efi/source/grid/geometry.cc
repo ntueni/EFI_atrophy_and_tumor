@@ -295,14 +295,17 @@ create_triangulation (dealii::Triangulation<dim> &tria)
 
         // Get the paths of the output files
         std::string path_inp  = input_directory.string() + sep + inputFileName;
- 
+        efilog(Verbosity::verbose) << "Importing geometry <"
+                                    << path_inp
+                                    << ">" << std::endl;
         std::ifstream istream(path_inp);
         dealii::GridIn<dim> gridIn;
-        std::cout << path_inp << std::endl;
         gridIn.attach_triangulation(tria);
         gridIn.read_ucd(istream);
 
-        this->printMeshInformation(tria);
+        efilog(Verbosity::verbose) << "New Geometry imported." << std::endl;
+
+        // this->printMeshInformation(tria);
 }
 
 

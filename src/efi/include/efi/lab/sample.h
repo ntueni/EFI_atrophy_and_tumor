@@ -36,7 +36,7 @@
 #include <efi/worker/boundary_worker.h>
 #include <efi/worker/general_cell_data_storage.h>
 #include <efi/worker/scratch_data.h>
-
+#include <efi/grid/obstacle.h>
 
 namespace efi {
 
@@ -118,9 +118,19 @@ public:
     const Geometry<dim> &
     get_geometry () const;
 
-    // Return a constant reference to the used constitutive model.
-    const ConstitutiveBase<dim> &
-    get_constitutive_model () const;
+    // Return a constant reference to the contact obstacle.
+    const Obstacle<dim> &
+    get_obstacle () const;
+
+    const std::vector<dealii::types::material_id>
+    get_material_ids() const;
+
+    void
+    set_material_ids();
+
+    // // Return a constant reference to the used constitutive model.
+    // const ConstitutiveBase<dim> &
+    // get_constitutive_model () const;
 
     // Return a constant reference to the used constitutive model when given material_id.
     const ConstitutiveBase<dim> &
@@ -168,6 +178,16 @@ public:
     boost::signals2::connection
     connect_boundary_loop (
             const BoundaryDataProcessorType &external_boundary_data_processor,
+            const BoundaryWorker<dim>       &external_boundary_worker,
+            const std::function<void(const CopyData&)> &external_copier,
+            boost::signals2::signal<void()> &signal);
+
+    /// Create a boundary mesh loop using the @p Sample data structures and
+    /// connect it to the given signal.
+    /// This function uses @p external_boundary_data_processor as data
+    /// processor for @p external_boundary_worker.
+    boost::signals2::connection
+    connect_boundary_loop (
             const BoundaryWorker<dim>       &external_boundary_worker,
             const std::function<void(const CopyData&)> &external_copier,
             boost::signals2::signal<void()> &signal);
@@ -223,6 +243,11 @@ private:
     void
     reinit_sparsity ();
 
+    // Application of contact via 
+    // updating solution and constraints object.
+    void
+    apply_contact_constraints (const unsigned int, const bool, const bool);
+
     // Assemble the linear system
     // characterized by system_matrix
     // and system_vector.
@@ -235,7 +260,7 @@ private:
 
     // Solve the nonlinear system.
     void
-    solve_nonlinear ();
+    solve_nonlinear (bool);
 
     // Perform an allreduce on the state.
     void
@@ -260,13 +285,16 @@ protected:
     std::unique_ptr<BoundaryWorker<dim>> boundary_worker;
 
     // constitutive model
-    std::unique_ptr<ConstitutiveBase<dim>> constitutive_model;
+    // std::unique_ptr<ConstitutiveBase<dim>> constitutive_model;
 
     // constitutive model
     std::map<int, std::unique_ptr<ConstitutiveBase<dim>>> constitutive_model_map;
 
     // geometry
     std::unique_ptr<Geometry<dim>> geometry;
+
+    // contact object
+    std::unique_ptr<Obstacle<dim>> obstacle;
 
 private:
 
@@ -283,6 +311,7 @@ private:
     // dof handler and constraints
     dealii::DoFHandler<dim>                dof_handler;
     dealii::AffineConstraints<scalar_type> constraints;
+    dealii::AffineConstraints<scalar_type> contact_constraints;
 
     // index sets
     dealii::IndexSet locally_owned_dofs;
@@ -352,6 +381,8 @@ private:
     std::unique_ptr<dealii::ConditionalOStream> ccond;
     std::unique_ptr<dealii::TimerOutput> timer;
 
+    std::vector<dealii::types::material_id> material_ids;
+
 };
 
 
@@ -414,15 +445,45 @@ get_geometry () const
 }
 
 
+// template <int dim>
+// inline
+// const Obstacle<dim> &
+// Sample<dim>::
+// get_obstacle () const;
+// {
+
+// }
+
+
+template <int dim>
+inline
+void
+Sample<dim>::
+set_material_ids()
+{    
+    for (const auto & cell : this->tria.active_cell_iterators())
+        if (!std::count(material_ids.begin(), material_ids.end(),cell->material_id()))
+            material_ids.push_back(cell->material_id());
+}
+
+ 
+template <int dim>
+inline
+const std::vector<dealii::types::material_id>
+Sample<dim>::
+ get_material_ids() const
+{
+    return material_ids;
+}  
 
 template <int dim>
 inline
 const ConstitutiveBase<dim>&
 Sample<dim>::
-get_constitutive_model () const
+get_constitutive_model (int material_id) const
 {
-    Assert (this->constitutive_model, dealii::ExcNotInitialized());
-    return *(this->constitutive_model);
+    // Assert (this->constitutive_model, dealii::ExcNotInitialized());
+    return *(this->constitutive_model_map.at(material_id));
 }
 
 
@@ -438,12 +499,13 @@ connect_mesh_loop (
         boost::signals2::signal<void()> &signal,
         const dealii::MeshWorker::AssembleFlags flags)
 {
-    Assert (this->constitutive_model, dealii::ExcNotInitialized());
+    // Assert (this->constitutive_model, dealii::ExcNotInitialized());
+
 
     return this->connect_mesh_loop (
-                *(this->constitutive_model),
+                *(this->constitutive_model_map.at(0)),
                 external_cell_worker,
-                *(this->constitutive_model),
+                *(this->constitutive_model_map.at(0)),
                 external_boundary_worker,
                 external_copier,
                 signal,
@@ -627,35 +689,23 @@ connect_mesh_loop (
 }
 
 
-
 template <int dim>
-template <class BoundaryDataProcessorType>
 inline
 boost::signals2::connection
 Sample<dim>::
 connect_boundary_loop (
-        const BoundaryDataProcessorType &external_boundary_data_processor,
         const BoundaryWorker<dim>       &external_boundary_worker,
         const std::function<void(const CopyData&)> &external_copier,
         boost::signals2::signal<void()> &signal)
 {
-    // Check if BoundaryDataProcessorType provides an evaluate-function with
-    // valid signature (void evaluate(ScratchData<dim> &) const).
-    static_assert(has_member_function_evaluate<
-            void(BoundaryDataProcessorType::*)(ScratchData<dim>&)const>::value,
-            "DataProcessor must implement the member function "
-            "<void evaluate(ScratchData<dim> &) const>.");
-
-    static_assert(has_member_function_get_needed_update_flags<
-            dealii::UpdateFlags(BoundaryDataProcessorType::*)()const>::value,
-            "DataProcessor must implement the member function "
-            "<dealii::UpdateFlags get_needed_update_flags() const>.");
 
     // Check if the sample copy data object is initialized.
     Assert (this->sample_copy_data, dealii::ExcNotInitialized());
 
     // An alias for the cell
     using CellIteratorType = decltype(this->dof_handler.begin_active());
+
+    // TODO: loop over boundary cells of different material types
 
     // Create a cell_worker compatible with the dealii::Meshworker interface.
     std::function<void(const CellIteratorType &cell,
@@ -678,8 +728,11 @@ connect_boundary_loop (
 
                 try
                 {
+                    // get cell material_id()
+                    int material_id = cell->material_id();
+
                     external_boundary_worker.fill (
-                            external_boundary_data_processor,
+                            this->get_constitutive_model(material_id),
                             this->locally_relevant_solution,
                             cell,
                             face_no,
@@ -695,6 +748,13 @@ connect_boundary_loop (
                 }
             };
 
+    dealii::UpdateFlags updateFlags = external_boundary_worker.get_needed_update_flags ();
+    for (const auto & cm: this->constitutive_model_map)
+    {
+        updateFlags = updateFlags | cm.second->get_needed_update_flags ();
+    }
+
+    // get update flags for all material models
     // Create a sample scratch data object
     ScratchData<dim> external_sample_scratch_data (
             *(this->mapping),
@@ -702,8 +762,7 @@ connect_boundary_loop (
             *(this->qf_cell),
               dealii::update_default,
             *(this->qf_face),
-              external_boundary_worker.get_needed_update_flags ()
-            | external_boundary_data_processor.get_needed_update_flags ());
+              updateFlags);
 
     // Create a new mesh loop
     std::function<void()> connectable_mesh_loop =
@@ -750,6 +809,262 @@ connect_boundary_loop (
     return signal.connect (connectable_mesh_loop);
 }
 
+
+
+template <int dim>
+template <class BoundaryDataProcessorType>
+inline
+boost::signals2::connection
+Sample<dim>::
+connect_boundary_loop (
+        const BoundaryDataProcessorType &external_boundary_data_processor,
+        const BoundaryWorker<dim>       &external_boundary_worker,
+        const std::function<void(const CopyData&)> &external_copier,
+        boost::signals2::signal<void()> &signal)
+{
+    // Check if BoundaryDataProcessorType provides an evaluate-function with
+    // valid signature (void evaluate(ScratchData<dim> &) const).
+    static_assert(has_member_function_evaluate<
+            void(BoundaryDataProcessorType::*)(ScratchData<dim>&)const>::value,
+            "DataProcessor must implement the member function "
+            "<void evaluate(ScratchData<dim> &) const>.");
+
+    static_assert(has_member_function_get_needed_update_flags<
+            dealii::UpdateFlags(BoundaryDataProcessorType::*)()const>::value,
+            "DataProcessor must implement the member function "
+            "<dealii::UpdateFlags get_needed_update_flags() const>.");
+
+    // Check if the sample copy data object is initialized.
+    Assert (this->sample_copy_data, dealii::ExcNotInitialized());
+
+    // An alias for the cell
+    using CellIteratorType = decltype(this->dof_handler.begin_active());
+
+    // TODO: loop over boundary cells of different material types
+
+    // Create a cell_worker compatible with the dealii::Meshworker interface.
+    std::function<void(const CellIteratorType &cell,
+                       ScratchData<dim>       &scratch_data,
+                       CopyData               &copy_data)> dummy_cell_worker;
+
+    // Create a cell_worker compatible with the dealii::Meshworker interface.
+    std::function<void(const CellIteratorType &cell,
+                       const unsigned int      face_no,
+                       ScratchData<dim>       &scratch_data,
+                       CopyData               &copy_data)>
+    boundary_worker =
+        [&](const CellIteratorType &cell,
+            const unsigned int      face_no,
+            ScratchData<dim>       &scratch_data,
+            CopyData               &copy_data)
+            {
+                if (this->state == State::failure)
+                    return;
+
+                try
+                {
+                    // get cell material_id()
+                    int material_id = cell->material_id();
+
+                    external_boundary_worker.fill (
+                            this->get_constitutive_model(material_id),
+                            this->locally_relevant_solution,
+                            cell,
+                            face_no,
+                            scratch_data,
+                            copy_data);
+                }
+                catch (dealii::ExceptionBase &exec)
+                {
+                    this->state = State::failure;
+                    efilog(Verbosity::normal) << "BoundaryWorker failed in"
+                                                 "connected boundary loop."
+                                              << std::endl;
+                }
+            };
+
+    dealii::UpdateFlags updateFlags = external_boundary_worker.get_needed_update_flags ();
+    for (const auto & cm: this->constitutive_model_map)
+    {
+        updateFlags = updateFlags | cm.second->get_needed_update_flags ();
+    }
+
+    // get update flags for all material models
+    // Create a sample scratch data object
+    ScratchData<dim> external_sample_scratch_data (
+            *(this->mapping),
+            *(this->fe),
+            *(this->qf_cell),
+              dealii::update_default,
+            *(this->qf_face),
+              updateFlags);
+
+    // Create a new mesh loop
+    std::function<void()> connectable_mesh_loop =
+            [this, dummy_cell_worker, boundary_worker,
+              &external_copier, external_sample_scratch_data]() mutable
+            {
+                // Add a reference to the cell_data_storage to the
+                // sample_scratch_data, such that it can be accessed
+                // by the worker, constitutive, and other objects,
+                // which have internal variables to store.
+                ScratchDataTools::attach_history_data_storage (
+                        external_sample_scratch_data,
+                      *(this->cell_data_history_storage));
+                ScratchDataTools::attach_tmp_history_data_storage (
+                        external_sample_scratch_data,
+                      *(this->tmp_cell_data_history_storage));
+
+                // Set the time step size.
+                ScratchDataTools::get_or_add_time_step_size(
+                        external_sample_scratch_data) = this->time_step_size;
+
+                // Now run the mesh loop with the specified worker classes.
+                mesh_loop (
+                        this->dof_handler.begin_active(),
+                        this->dof_handler.end(),
+                        dummy_cell_worker,
+                        external_copier,
+                        external_sample_scratch_data,
+                        *(this->sample_copy_data),
+                        dealii::MeshWorker::work_on_boundary,
+                        boundary_worker);
+
+                // Perform all reduce the state such that the state
+                // is consistent for all processors.
+                this->all_reduce_state ();
+
+                // just some output
+                if (this->state == State::success)
+                    efilog(Verbosity::debug) << "Registered mesh loop."
+                                             << std::endl;
+            };
+
+    // Connect the new mesh loop and return the connection.
+    return signal.connect (connectable_mesh_loop);
+}
+
+
+// template <int dim>
+// template <class BoundaryDataProcessorType>
+// inline
+// boost::signals2::connection
+// Sample<dim>::
+// connect_boundary_loop (
+//         const BoundaryWorker<dim>       &external_boundary_worker,
+//         const std::function<void(const CopyData&)> &external_copier,
+//         boost::signals2::signal<void()> &signal)
+// {
+
+//     // Check if the sample copy data object is initialized.
+//     Assert (this->sample_copy_data, dealii::ExcNotInitialized());
+
+//     // An alias for the cell
+//     using CellIteratorType = decltype(this->dof_handler.begin_active());
+
+//     // TODO: loop over boundary cells of different material types
+
+//     // Create a cell_worker compatible with the dealii::Meshworker interface.
+//     std::function<void(const CellIteratorType &cell,
+//                        ScratchData<dim>       &scratch_data,
+//                        CopyData               &copy_data)> dummy_cell_worker;
+
+//     // Create a cell_worker compatible with the dealii::Meshworker interface.
+//     std::function<void(const CellIteratorType &cell,
+//                        const unsigned int      face_no,
+//                        ScratchData<dim>       &scratch_data,
+//                        CopyData               &copy_data)>
+//     boundary_worker =
+//         [&](const CellIteratorType &cell,
+//             const unsigned int      face_no,
+//             ScratchData<dim>       &scratch_data,
+//             CopyData               &copy_data)
+//             {
+//                 if (this->state == State::failure)
+//                     return;
+
+//                 try
+//                 {
+//                     // get cell material_id()
+//                     int material_id = cell->material_id();
+
+//                     external_boundary_worker.fill (
+//                             this->get_constitutive_model(material_id),
+//                             this->locally_relevant_solution,
+//                             cell,
+//                             face_no,
+//                             scratch_data,
+//                             copy_data);
+//                 }
+//                 catch (dealii::ExceptionBase &exec)
+//                 {
+//                     this->state = State::failure;
+//                     efilog(Verbosity::normal) << "BoundaryWorker failed in"
+//                                                  "connected boundary loop."
+//                                               << std::endl;
+//                 }
+//             };
+
+//     dealii::UpdateFlags updateFlags = external_boundary_worker.get_needed_update_flags ();
+//     for (const auto & cm: this->constitutive_model_map)
+//     {
+//         updateFlags = updateFlags | cm.second->get_needed_update_flags ();
+//     }
+
+//     // get update flags for all material models
+//     // Create a sample scratch data object
+//     ScratchData<dim> external_sample_scratch_data (
+//             *(this->mapping),
+//             *(this->fe),
+//             *(this->qf_cell),
+//               dealii::update_default,
+//             *(this->qf_face),
+//               updateFlags);
+
+//     // Create a new mesh loop
+//     std::function<void()> connectable_mesh_loop =
+//             [this, dummy_cell_worker, boundary_worker,
+//               &external_copier, external_sample_scratch_data]() mutable
+//             {
+//                 // Add a reference to the cell_data_storage to the
+//                 // sample_scratch_data, such that it can be accessed
+//                 // by the worker, constitutive, and other objects,
+//                 // which have internal variables to store.
+//                 ScratchDataTools::attach_history_data_storage (
+//                         external_sample_scratch_data,
+//                       *(this->cell_data_history_storage));
+//                 ScratchDataTools::attach_tmp_history_data_storage (
+//                         external_sample_scratch_data,
+//                       *(this->tmp_cell_data_history_storage));
+
+//                 // Set the time step size.
+//                 ScratchDataTools::get_or_add_time_step_size(
+//                         external_sample_scratch_data) = this->time_step_size;
+
+//                 // Now run the mesh loop with the specified worker classes.
+//                 mesh_loop (
+//                         this->dof_handler.begin_active(),
+//                         this->dof_handler.end(),
+//                         dummy_cell_worker,
+//                         external_copier,
+//                         external_sample_scratch_data,
+//                         *(this->sample_copy_data),
+//                         dealii::MeshWorker::work_on_boundary,
+//                         boundary_worker);
+
+//                 // Perform all reduce the state such that the state
+//                 // is consistent for all processors.
+//                 this->all_reduce_state ();
+
+//                 // just some output
+//                 if (this->state == State::success)
+//                     efilog(Verbosity::debug) << "Registered mesh loop."
+//                                              << std::endl;
+//             };
+
+//     // Connect the new mesh loop and return the connection.
+//     return signal.connect (connectable_mesh_loop);
+// }
 
 
 template <int dim>

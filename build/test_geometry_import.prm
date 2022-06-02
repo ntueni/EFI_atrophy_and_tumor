@@ -8,25 +8,91 @@ subsection experiment
   subsection sample
 
     subsection finite element
-      set polynomial degree = 2
+      set polynomial degree = 1
     end
 
     subsection geometry@[type=import]
-      set inpFile = cylinderUCD.inp
-    end
-    
-    subsection constitutive@[type=neo_hooke,instance=1,material_id=0]
-          set young's modulus = 2.1e3
-          set poisson ratio = 0.35
+        set inpFile = imperfectSmoothedSphereV2.inp
+      # set inpFile = sphere.inp  
+      # set inpFile = ConeUCD.inp
+      # set inpFile = coarseCone.inp
     end   
     
-
-    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=5]
-          set alpha = -20
-          set bulk modulus = 3.e3
-          set empirical coefficient = -2.
-          set mu = 0.7e3
+    subsection constitutive@[type=neo_hooke,instance=1,material_id=0]
+          set young's modulus = 2.1
+          set poisson ratio = 0.40
     end 
+    
+    
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=5]
+          set alpha = -90.
+          set bulk modulus = 500.
+          set empirical coefficient = -2.
+          set mu = 20.
+    end 
+        
+    
+    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=100000]
+        subsection constitutive@[type=maxwell_element,instance = 1]
+            set deviatoric viscosity = 100.7 
+            set volumetric viscosity = 100000.       
+            subsection constitutive@[type=modified_one_term_ogden,instance=1]
+                  set alpha = -90.
+                  set bulk modulus = 500.
+                  set empirical coefficient = -2.
+                  set mu = 20.
+            end 
+        end                  
+        subsection constitutive@[type=modified_one_term_ogden,instance=1]
+              set alpha = 33.
+              set bulk modulus = 852.
+              set empirical coefficient = -2.
+              set mu = 88.
+        end
+          
+    end
+        
+    
+    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=50000]
+        subsection constitutive@[type=maxwell_element,instance = 1]
+            set deviatoric viscosity = 100.7 
+            set volumetric viscosity = 100000.       
+            subsection constitutive@[type=modified_one_term_ogden,instance=1]
+                  set alpha = -66.
+                  set bulk modulus = 772.
+                  set empirical coefficient = -2.
+                  set mu = 80.
+            end 
+        end                  
+        subsection constitutive@[type=modified_one_term_ogden,instance=1]
+              set alpha = 33.
+              set bulk modulus = 852.
+              set empirical coefficient = -2.
+              set mu = 88.
+        end
+          
+    end  
+    
+    
+    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=10]
+        subsection constitutive@[type=maxwell_element,instance = 1]
+            set deviatoric viscosity = 100.7 
+            set volumetric viscosity = 100000.       
+            subsection constitutive@[type=modified_one_term_ogden,instance=1]
+                  set alpha = -20.
+                  set bulk modulus = 972.
+                  set empirical coefficient = -2.
+                  set mu = 100.
+            end 
+        end                  
+        subsection constitutive@[type=modified_one_term_ogden,instance=1]
+              set alpha = 33.
+              set bulk modulus = 852.
+              set empirical coefficient = -2.
+              set mu = 88.
+        end
+          
+    end
 
     subsection nonlinear_solver_control
       set absolute tolerance = 1e-10
@@ -47,6 +113,8 @@ subsection global
   set output directory = /calculate/efiSim1F/build/out
 
   set input directory  = /calculate/efiSim1F/build/in
+  
+  set output filename = imperfectSmoothedSphereV2
 
   set paraview output = true
 

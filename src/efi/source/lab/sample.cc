@@ -17,6 +17,7 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/base/parameter_handler.h>
+#include <deal.II/physics/elasticity/kinematics.h>
 //#include <deal.II/meshworker/mesh_loop.h>
 
 // efi headers
@@ -28,6 +29,7 @@
 #include <efi/base/postprocessor.h>
 #include <efi/worker/scratch_data.h>
 #include <efi/base/global_parameters.h>
+#include <efi/grid/obstacle.h>
 
 namespace efi {
 
@@ -82,26 +84,26 @@ Sample<dim>::
     using namespace dealii;
     efilog(Verbosity::debug) << "Sample deleted"
       << std::endl;
-    // if (efi::MPI::is_root (this->mpi_communicator))
-    // {
-    //     static std::ofstream tFile;
+    if (efi::MPI::is_root (this->mpi_communicator))
+    {
+        static std::ofstream tFile;
 
-	// std::map< std::string, double > timeMap=
-	//   (*(this->timer)).get_summary_data(TimerOutput::total_cpu_time);  
-	// std::string k;
-	// double v;
-	// /*tFile.open(this->output_directory.string()+
-	// 	    std::string(1,this->output_directory.separator)+
-	// 	    "cpu_timing", std::ios::out);
-	// */
-	// tFile.open("cpu_timing",std::ios::out);
-	// for (const auto &p : timeMap){ 
-	// //for (const auto &[k, v] : timeMap)
-	//   std::tie(k,v) = p; 
-	//   tFile << k <<","<< v << std::endl;
-	// }
-	// tFile.close();
-    // }    
+	std::map< std::string, double > timeMap=
+	  (*(this->timer)).get_summary_data(TimerOutput::total_cpu_time);  
+	std::string k;
+	double v;
+	/*tFile.open(this->output_directory.string()+
+		    std::string(1,this->output_directory.separator)+
+		    "cpu_timing", std::ios::out);
+	*/
+	tFile.open("cpu_timing",std::ios::out);
+	for (const auto &p : timeMap){ 
+	//for (const auto &[k, v] : timeMap)
+	  std::tie(k,v) = p; 
+	  tFile << k <<","<< v << std::endl;
+	}
+	tFile.close();
+    }    
     this->timer.reset(NULL); 
     
     this->dof_handler.clear();
@@ -207,16 +209,26 @@ run (const std::map<dealii::types::global_dof_index,double> &prescribed,
     dealii::types::global_dof_index dof;
     double value;
 
+    bool print = false; 
+    // Re-sets solution value to boundary value
     for (auto &el : prescribed)
     {
         std::tie(dof,value) = el;
 
         if (this->locally_owned_dofs.is_element (dof))
             this->locally_owned_solution.set (1, &dof, &value);
+        
+        // if (value < -2.4)
+        //     print = true;
+
     }
+    if (print)
+        std::cout << "printing results" << std::endl;
+
     this->locally_owned_solution.compress(VectorOperation::insert);
 
-    this->solve_nonlinear ();
+    
+    this->solve_nonlinear (print);
 
     if (this->state == State::success)
     {
@@ -242,6 +254,12 @@ instantiate (std::istream &unprocessed_input)
 {
     using namespace dealii;
 
+
+    unsigned int n_mpi_processes =
+            Utilities::MPI::n_mpi_processes(mpi_communicator);
+
+    std::cout << "Number of processors: " << n_mpi_processes << std::endl;
+
     //TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
     FactoryTools::action_type create_contsitutive
@@ -261,9 +279,9 @@ instantiate (std::istream &unprocessed_input)
                         this->get_section_path(), specs, unprocessed_input));
 
         
-        this->constitutive_model.reset (
-                ConstitutiveFactory<dim>::create (
-                        this->get_section_path(), specs, unprocessed_input));
+        // this->constitutive_model.reset (
+        //         ConstitutiveFactory<dim>::create (
+        //                 this->get_section_path(), specs, unprocessed_input));
     };
 
     FactoryTools::action_type create_geometry
@@ -293,9 +311,17 @@ instantiate (std::istream &unprocessed_input)
     this->cell_worker.reset (new CellWorker<dim>());
     this->boundary_worker.reset (new BoundaryWorker<dim>());
 
+    // Initialize contact geometry object
+    dealii::types::boundary_id contact_boundary_id = 3;
+    this->obstacle.reset(new Obstacle<dim>());
+    this->obstacle->set_contact_boundary(contact_boundary_id);
+
     // just some output
     efilog(Verbosity::verbose) << "Sample parses unprocessed input."
                                << std::endl;
+
+    
+    std::cout << "sample instantiate  completed" << std::endl;
 }
 
 
@@ -319,25 +345,17 @@ initialize ()
 
     Assert (this->boundary_worker,    ExcNotInitialized ());
     Assert (this->cell_worker,        ExcNotInitialized ());
-    Assert (this->constitutive_model, ExcNotInitialized ());
+    // Assert (this->constitutive_model, ExcNotInitialized ());
+    // Assert (this->constitutive_model_map, ExcNotInitialized ());
     Assert (this->geometry,           ExcNotInitialized ());
     Assert (this->mapping,            ExcNotInitialized ());
 
 
 
-    int count = 0;
-    dealii::UpdateFlags updateFlags;
+    dealii::UpdateFlags updateFlags = this->cell_worker->get_needed_update_flags ();
     for (const auto & cm: this->constitutive_model_map)
     {
-        if (count == 0)
-            {
-            updateFlags = cm.second->get_needed_update_flags ();
-            count++;
-            }
-        else
-        {
-            updateFlags = updateFlags | cm.second->get_needed_update_flags ();
-        }
+        updateFlags = updateFlags | cm.second->get_needed_update_flags ();            
     }
 
     // After we have gathered all information
@@ -347,8 +365,7 @@ initialize ()
             *(this->mapping),
             *(this->fe),
             *(this->qf_cell),
-              this->cell_worker->get_needed_update_flags ()
-            | updateFlags,
+            updateFlags,
             *(this->qf_face),
               this->boundary_worker->get_needed_update_flags ()));
 
@@ -363,6 +380,18 @@ initialize ()
 
     // The geometry requires the dof_handler to be initialized.
     this->geometry->connect_constraints (*this);
+
+    // Create contact geometry
+    if (GlobalParameters::contact_enabled())
+        {
+            this->obstacle->create();
+            efilog(Verbosity::very_verbose) << "Contact will be applied"
+                                    << std::endl;
+        }
+    else {
+            efilog(Verbosity::very_verbose) << "No contact will be applied"
+                                    << std::endl;
+        }
 
     // Find the set of locally owned dofs.
     this->locally_owned_dofs = this->dof_handler.locally_owned_dofs ();
@@ -390,6 +419,7 @@ initialize ()
                                     << std::endl;
     // just some output
     efilog(Verbosity::verbose) << "Sample finished initialization." << std::endl;
+    
 }
 
 template <int dim>
@@ -524,7 +554,7 @@ reinit_sparsity ()
                *(this->sample_scratch_data),
                sample_sparsity_copy_data,
                MeshWorker::assemble_own_cells
-               | MeshWorker::assemble_boundary_faces,
+               | MeshWorker::assemble_boundary_faces ,
                boundary_woker);
 
     // Since running in parallel, the sparsity pattern
@@ -554,6 +584,132 @@ reinit_sparsity ()
 }
 
 template <int dim>
+void    
+Sample<dim>::
+apply_contact_constraints (const unsigned int stepNo, const bool apply, const bool printData)
+{
+    using namespace dealii;
+
+    TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
+
+    FEValuesExtractors::Vector displacements(0);
+
+    std::vector<bool> touched_dofs(this->dof_handler.n_dofs(),false);
+    LA::MPI::Vector distributed_solution(
+            this->locally_owned_dofs,
+            this->mpi_communicator);
+
+    distributed_solution = this->locally_relevant_solution;
+
+    this->contact_constraints.reinit(this->locally_relevant_dofs);
+
+if (apply)
+    {// QGaussLobatto<dim-1> face_quadrature(this->fe->degree + 1);
+    Quadrature<dim-1> face_quadrature(this->fe->get_unit_face_support_points());
+    FEFaceValues<dim> fe_values_face(*fe, face_quadrature, update_quadrature_points |
+                                           update_normal_vectors |
+                                           update_gradients);
+
+    const unsigned int dofs_per_face = this->fe->n_dofs_per_face();
+    const unsigned int n_face_q_points = face_quadrature.size();
+
+    std::vector<types::global_dof_index> dof_indices(dofs_per_face);
+
+    if (stepNo > 0)
+        for (const auto & cell : dof_handler.active_cell_iterators())
+            if(!cell->is_artificial() && cell->at_boundary())
+                for (const auto & face : cell->face_iterators())
+                    if (face->at_boundary() && (face->boundary_id() == this->obstacle->get_contact_boundary_id()) )
+                        {
+                            fe_values_face.reinit(cell, face);
+                            face->get_dof_indices(dof_indices);
+                            std::vector<Tensor<2, dim>> grad_u(n_face_q_points);
+                            fe_values_face[displacements].get_function_gradients(this->locally_relevant_solution, grad_u);
+                            for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
+                            {
+                                const int index = dof_indices[q_point];                            
+                                if (touched_dofs[index] == false)
+                                { 
+                                    std::vector<types::global_dof_index> vertex_dof_indices(&dof_indices[q_point],(&dof_indices[q_point])+dim);
+                                    if (!constraints.is_constrained(vertex_dof_indices[0]) 
+                                            || !constraints.is_constrained(vertex_dof_indices[1])
+                                            || !constraints.is_constrained(vertex_dof_indices[2]))
+                                    {
+
+                                        // std::cout << "cell id: " << cell->id() << std::endl;
+                                        // std::cout << "face_vertex: index " << index << std::endl;
+                                        // Need to calculate normal vector of displaced body 
+                                        //      n = J*F_inv*N (N = undeformed normal vector, J = det(F))
+                                        Tensor<2,dim> F = Physics::Elasticity::Kinematics::F(grad_u[q_point]); // deformation gradient at quad point
+                                        Tensor<2,dim> F_inv = invert(F);
+                                        double J = determinant(F);
+                                        Tensor<1,dim> normal_vector =  fe_values_face.normal_vector(q_point);
+                                        Tensor<1,dim> def_normal_vector = J*transpose(F_inv)*normal_vector;
+
+                                        touched_dofs[index] = true;
+                                        Point<dim> support_pnt = fe_values_face.quadrature_point(q_point);
+                                        Point<dim> slave_pnt = support_pnt;
+
+                                        Tensor<1,dim> def_at_point;
+                                        for (unsigned int v_index=0; v_index<dim;v_index++)
+                                        {
+                                            const unsigned int vertex_dof_index = vertex_dof_indices[v_index];
+                                            slave_pnt(v_index) += this->locally_relevant_solution(vertex_dof_index);
+                                            def_at_point[v_index] = this->locally_relevant_solution(vertex_dof_index);
+                                        }
+
+                                        double u_dot_n = scalar_product(def_at_point,def_normal_vector);
+
+                                        if ( std::fabs(u_dot_n) > 1e-9)
+                                        {
+                                                Point<dim> master_pnt;
+                                                bool print = false;
+                                                // Find min gap distance (and mater _pnt) to contact surface 
+                                                bool applySurfaceConstraint = this->obstacle->find_master_pnt(slave_pnt, master_pnt, print); 
+                                                if (applySurfaceConstraint)
+                                                {
+                                                    Tensor<1,dim> constrained_solution = master_pnt - support_pnt;
+                                                    for (unsigned int i = 0; i<vertex_dof_indices.size(); i++)
+                                                    {
+                                                        unsigned int idx = vertex_dof_indices[i];
+                                                        if (!constraints.is_constrained(idx))
+                                                        // Add constraint
+                                                        this->contact_constraints.add_line(idx);
+                                                        this->contact_constraints.set_inhomogeneity(idx, 0);
+                                                        // Change distibuted solution
+                                                        distributed_solution(idx) = constrained_solution[i];
+                                                        if (constrained_solution[i]>0.0001 || constrained_solution[i]<-0.0001)
+                                                        {
+                                                            // std::cout << "constrained_solution: " << constrained_solution << std::endl;
+                                                            // std::cout << "idx: " << idx << std::endl;
+                                                            // std::cout << "support_pnt: " << support_pnt << std::endl;
+                                                            // std::cout << "slave_pnt: " << slave_pnt << std::endl;
+                                                            // std::cout << "master_pnt: " << master_pnt << std::endl;
+                                                        }
+                                                    }
+                                                    if (print)
+                                                        std::cout << "Finished" << std::endl;
+                                                } 
+                                                // else {
+                                                    // std::cout << "Index: " << index << " at point " << slave_pnt << "will not be constrained" << std::endl;
+                                                // }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+        
+    distributed_solution.compress(VectorOperation::insert);
+    this->locally_relevant_solution = distributed_solution;
+
+    efilog(Verbosity::debug) << "Contact Applied."
+                                                  << std::endl;
+    }
+    this->contact_constraints.close();
+    this->contact_constraints.merge(this->constraints);    
+}
+
+template <int dim>
 void
 Sample<dim>::
 assemble ()
@@ -564,7 +720,8 @@ assemble ()
 
     Assert (this->boundary_worker,     ExcNotInitialized());
     Assert (this->cell_worker,         ExcNotInitialized());
-    Assert (this->constitutive_model,  ExcNotInitialized());
+    // Assert (this->constitutive_model,  ExcNotInitialized());
+    // Assert (this->constitutive_model_map,  ExcNotInitialized());
     Assert (this->sample_scratch_data, ExcNotInitialized());
     Assert (this->sample_copy_data,    ExcNotInitialized());
 
@@ -574,25 +731,6 @@ assemble ()
 
     
     using CellIteratorType = decltype(this->dof_handler.begin_active());
-
-    std::vector<unsigned int> material_ids = {0,5};
-
-    for (unsigned int matId : material_ids)
-    {
-
-        IteratorFilters::MaterialIdEqualTo materialFilter(matId);
-        FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-        cell(materialFilter),
-        endc(materialFilter,this->dof_handler.end());
-        
-        cell.set_to_next_positive(this->dof_handler.begin_active());
-
-        CellIteratorType begin = cell.set_to_next_positive(this->dof_handler.begin_active());
-        typename dealii::identity<CellIteratorType>::type end = endc;
-        
-        // /update scratch data UpdateFlags to associate with current material model
-        // this->sample_scratch_data.set_update_flags(this->constitutive_model_map.at(cell->material_id())->get_needed_update_flags ())
-
 
     // Loop over material types and set up system?
     auto cell_woker =
@@ -650,18 +788,20 @@ assemble ()
                         this->system_vector,
                         this->system_matrix,
                         this->state,
-                        this->constraints);
+                        this->contact_constraints);
 
-    mesh_loop (begin, end,
+    mesh_loop (this->dof_handler.begin_active(),
+               this->dof_handler.end(),
                cell_woker,
                copier,
                *(this->sample_scratch_data),
                *(this->sample_copy_data),
                MeshWorker::assemble_own_cells
-             | MeshWorker::assemble_boundary_faces,
+                | MeshWorker::assemble_boundary_faces
+               | MeshWorker::cells_after_faces,
                boundary_woker);
 
-    }
+    // }
     // Perform all reduce the state such that the state
     // is consistent for all processors.
     this->all_reduce_state ();
@@ -757,7 +897,7 @@ solve_linear ()
         return;
     }
 
-    this->constraints.distribute (this->system_increment);
+    this->contact_constraints.distribute (this->system_increment);
 }
 
 
@@ -765,7 +905,7 @@ solve_linear ()
 template <int dim>
 void
 Sample<dim>::
-solve_nonlinear ()
+solve_nonlinear (bool printValue)
 {
     using namespace dealii;
 
@@ -806,6 +946,18 @@ solve_nonlinear ()
         // locally relevant solution.
         this->locally_relevant_solution = this->locally_owned_solution;
 
+        bool const apply_contact = GlobalParameters::contact_enabled();
+        this->apply_contact_constraints (step, apply_contact, printValue); 
+
+        // this->obstacle->print_surface("/calculate/efiSim1F/build/in/Problem-cells.vtu");
+
+        this->all_reduce_state ();
+        efilog(Verbosity::debug)
+                    <<  "Contact Constraints applied" << std::endl;
+        efilog(Verbosity::debug)
+                    <<  "Cells constarined at boundary 4: " << Obstacle<dim>::cellCount << std::endl;
+
+        Obstacle<dim>::cellCount = 0;
         this->assemble ();
 
         // Check if an assembly error occurred.
@@ -818,7 +970,6 @@ solve_nonlinear ()
             break;
 
         this->solve_linear ();
-
         // Check if a linear solver error occurred.
         if (this->state != State::success)
             break;
@@ -874,7 +1025,7 @@ write_output (const unsigned int step,
     // has to survive longer. Otherwise an
     // error will be thrown in Debug mode.
     CellDataPostProcessor<dim> post_processor (
-            this->constitutive_model_map,this->cell_data_history_storage.get ());
+            this->constitutive_model_map,this->cell_data_history_storage.get());
 
     // setup the data out object
     DataOut<dim> out;
@@ -904,11 +1055,16 @@ write_output (const unsigned int step,
     std::string directory (output_directory.string()
                          + std::string(1,output_directory.separator));
 
+
+    std::string output_filename = 
+        GlobalParameters::get_output_filename();
+
     // common name of the output files
-    std::string name ("dist_solution-"
+    std::string name (output_filename
                     + Utilities::int_to_string(dim,1)
                     + "d-"
                     + Utilities::int_to_string(step, 3));
+
 
     // write the owned by this processor
     std::ofstream output(directory + name
@@ -917,6 +1073,10 @@ write_output (const unsigned int step,
                         + ".vtu");
 
     out.write_vtu(output);
+
+    // GridOut gridOut;
+    // std::ofstream output_stream(directory + name + "grid.vtu");
+    // gridOut.write_vtu(tria,output_stream);
 
     // Push the master file into the times_and_names
     // vector to be able to write the pvd record later.
@@ -938,7 +1098,8 @@ write_output (const unsigned int step,
 
         // write pvd
         std::ofstream pvd_output (directory
-                                + "dist_solution-"
+                                + output_filename +
+                                + "_solution-"
                                 + Utilities::int_to_string(dim,1)
                                 + "d.pvd");
 

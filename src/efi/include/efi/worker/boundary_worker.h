@@ -168,7 +168,28 @@ fill (const DataProcessor    &data_processor,
     data_processor.evaluate (scratch_data);
 
     // Now, do the actual job.
-    this->do_fill (scratch_data,copy_data);
+        this->do_fill (scratch_data,copy_data);
+    // const auto &face = cell->face(face_no);
+    // // for (const auto &face: cell->face_iterators())
+    // if (face->boundary_id() == 5)
+    // {
+    //     auto &fe_face = scratch_data.get_current_fe_values();
+    //     const unsigned int dofs_per_face = 12;
+    //     efilog(Verbosity::verbose) << "BoundaryWorker do_fill for face ";
+    //     std::cout << cell->id().to_string() << " with " << dofs_per_face 
+    //     << " dofs per face" << std::endl;
+    //     std::vector<dealii::types::global_dof_index> vertex_dof_indices(dofs_per_face);
+
+        
+    //     face->get_dof_indices(vertex_dof_indices);
+    //     for (auto & dof : vertex_dof_indices)
+    //     {
+    //         // std::cout << "Changing dof : " << dof << 
+    //         // " from " << fe_function[dof] << " to 10000." << std::endl;
+    //         // fe_function[dof] = 10000;
+    //     } 
+    // }   
+        
 }
 
 

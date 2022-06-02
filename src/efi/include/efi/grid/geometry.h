@@ -272,7 +272,7 @@ public:
     std::string
     inpFile;
 
-    void printMeshInformation(const dealii::Triangulation<dim> &) const;
+    void printMeshInformation(const dealii::Triangulation<dim> &);
 };
 
 
@@ -415,19 +415,19 @@ accept (GeometryVisitor<dim> &v) const
     v.visit(*this);
 }
 
+
 /// Function to give mesh information for an imported geometry.
 /// Taken from deal.ii step-49 tutorial
 template <int dim>
 inline
 void
 ImportedGeometry<dim>::
-printMeshInformation (const dealii::Triangulation<dim> &triangulation) const
+printMeshInformation (const dealii::Triangulation<dim> &triangulation)
 {
     std::cout << "Mesh info:" << std::endl
             << " dimension: " << dim << std::endl
             << " no. of cells: " << triangulation.n_active_cells() << std::endl;
 
-            {
     std::map<dealii::types::boundary_id, unsigned int> boundary_count;
     for (const auto &face : triangulation.active_face_iterators())
       if (face->at_boundary())
@@ -440,7 +440,7 @@ printMeshInformation (const dealii::Triangulation<dim> &triangulation) const
         std::cout << pair.first << "(" << pair.second << " times) ";
       }
     std::cout << std::endl;
-  }
+
 }
 
 

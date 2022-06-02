@@ -533,7 +533,7 @@ mesh_loop(
  * CopyData               copy(...);
  *
  * auto cell_worker = [...] (
- *   const CellIteratorType &cell,
+ *   cell workerst CellIteratorType &cell,
  *   ScratchData            &scratch_data,
  *   CopyData               &copy_data)
  * {

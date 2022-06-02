@@ -45,6 +45,15 @@ get_output_directory()
     return global_parameters().output_path;
 }
 
+std::string
+GlobalParameters::
+get_output_filename()
+{
+    Assert (global_parameters().parsed,
+            dealii::ExcMessage("Parameters have not been parsed"));
+    return global_parameters().output_filename;
+}
+
 boost::filesystem::path
 GlobalParameters::
 get_input_directory()
@@ -66,6 +75,18 @@ paraview_output_enabled()
                 "paraview output");
 }
 
+bool
+GlobalParameters::
+contact_enabled()
+{
+    Assert (global_parameters().parsed,
+            dealii::ExcMessage("Parameters have not been parsed"));
+
+    return  dealii::ParameterAcceptor::prm.get_bool(
+                global_parameters().get_section_path(),
+                "contact");
+}
+
 
 void
 GlobalParameters::
@@ -77,6 +98,11 @@ declare_parameters (dealii::ParameterHandler &prm)
         = boost::filesystem::current_path() / "out";
     prm.declare_entry("output directory",output_path.string(),
             Patterns::DirectoryName());
+
+    // std::string output_filename
+    //     = boost::filesystem::current_path() / "out";
+    prm.declare_entry("output filename","dist-test-",
+            Patterns::FileName());
 
     boost::filesystem::path input_path
         = boost::filesystem::current_path();
@@ -94,6 +120,10 @@ declare_parameters (dealii::ParameterHandler &prm)
     prm.declare_entry ("paraview output","false",
             Patterns::Bool(),
             "Set to true if you want to write output for paraview.");
+
+    prm.declare_entry ("contact","true",
+            Patterns::Bool(),
+            "Set to false if you don't want to apply no separation contact.");
 }
 
 
@@ -106,6 +136,7 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     this-> output_path = boost::filesystem::absolute(prm.get ("output directory"));
     this-> input_path  = boost::filesystem::absolute(prm.get ("input directory"));
+    this-> output_filename = prm.get ("output filename");
 
     std::string verbosity_console = prm.get ("verbosity console");
     std::string verbosity_logfile = prm.get ("verbosity logfile");
