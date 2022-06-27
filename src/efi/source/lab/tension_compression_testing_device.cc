@@ -375,7 +375,7 @@ run (Sample<dim> &sample)
                                       + input.data[step].second)));
                 }
 
-                AssertThrow (++refinement_lvl < 100,
+                AssertThrow (++refinement_lvl < 6,
                         dealii::ExcMessage ("Time step refinement level > 5."));
                 --step;
             }
