@@ -500,6 +500,7 @@ connect_mesh_loop (
         const dealii::MeshWorker::AssembleFlags flags)
 {
     // Assert (this->constitutive_model, dealii::ExcNotInitialized());
+    std::cout << "connect_mesh_loop () called" << std::endl;
 
 
     return this->connect_mesh_loop (

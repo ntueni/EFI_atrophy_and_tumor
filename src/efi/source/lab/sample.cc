@@ -952,10 +952,13 @@ solve_nonlinear (bool printValue)
         // this->obstacle->print_surface("/calculate/efiSim1F/build/in/Problem-cells.vtu");
 
         this->all_reduce_state ();
-        efilog(Verbosity::debug)
+        if (apply_contact)
+        {
+            efilog(Verbosity::debug)
                     <<  "Contact Constraints applied" << std::endl;
-        efilog(Verbosity::debug)
-                    <<  "Cells constarined at boundary 4: " << Obstacle<dim>::cellCount << std::endl;
+            efilog(Verbosity::debug)
+                    <<  "Cells at boundary 4: " << Obstacle<dim>::cellCount << std::endl;
+        }
 
         Obstacle<dim>::cellCount = 0;
         this->assemble ();

@@ -71,7 +71,7 @@ namespace efi {
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/ConeUCDBoundary.inp"; 
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/sphereBoundary.inp"; 
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/imperfectSmoothedSphereV2Boundary.inp";         
-        std::string boundaryFile  = "/calculate/efiSim1F/build/in/BrainJuneUnsmoothedBoundary.inp"; 
+        std::string boundaryFile  = "/calculate/efiSim1F/build/in/TestBrainJune13Boundary.inp"; 
 
         efi::efilog(Verbosity::normal) << "Importing obstacle from "<< boundaryFile << std::endl;
         std::ifstream istream(boundaryFile);
@@ -79,7 +79,7 @@ namespace efi {
         gridIn.attach_triangulation(this->testTriangulation);
         gridIn.read_ucd(istream);
 
-        this->print_surface("/calculate/efiSim1F/build/out/Boundary.vtu");
+        // this->print_surface("/calculate/efiSim1F/build/out/Boundary.vtu");
 
         efi::efilog(Verbosity::normal) << "Boundary grid IMPORTED" << std::endl;
 
@@ -308,7 +308,7 @@ namespace efi {
             for (const auto v : cell_face->vertex_indices())
             {
                 nodes_coords[v] = cell_face->vertex(v);
-                if (slave_pnt.distance(nodes_coords[v]) < 1e-5)
+                if (slave_pnt.distance(nodes_coords[v]) < 1e-9)
                 {
                     master_pnt = nodes_coords[v];
                     return true;
