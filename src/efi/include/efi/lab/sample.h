@@ -246,7 +246,10 @@ private:
     // Application of contact via 
     // updating solution and constraints object.
     void
-    apply_contact_constraints (const unsigned int, const bool, const bool);
+    apply_contact_constraints (const unsigned int, const bool);
+
+    void 
+    compute_residual();
 
     // Assemble the linear system
     // characterized by system_matrix
@@ -270,6 +273,10 @@ private:
     void
     write_output (const unsigned int step,
                   const double       time);
+
+    //Move mesh
+    void
+    move_mesh(const  LA::MPI::Vector &displacement) const;
 
 protected:
 
@@ -312,10 +319,12 @@ private:
     dealii::DoFHandler<dim>                dof_handler;
     dealii::AffineConstraints<scalar_type> constraints;
     dealii::AffineConstraints<scalar_type> contact_constraints;
+    dealii::AffineConstraints<scalar_type> empty_constraints;
 
     // index sets
     dealii::IndexSet locally_owned_dofs;
     dealii::IndexSet locally_relevant_dofs;
+    dealii::IndexSet active_set;
 
     // local objects
     std::unique_ptr<dealii::FESystem<dim>>        fe;
@@ -329,6 +338,8 @@ private:
     LA::MPI::SparseMatrix system_matrix;
     LA::MPI::Vector       system_vector;
     LA::MPI::Vector       system_increment;
+    LA::MPI::Vector       diag_mass_matrix_vector;
+    LA::MPI::Vector       uncondensed_rhs;
     LA::MPI::Vector       locally_owned_solution;
     LA::MPI::Vector       locally_relevant_solution;
 
@@ -382,6 +393,8 @@ private:
     std::unique_ptr<dealii::TimerOutput> timer;
 
     std::vector<dealii::types::material_id> material_ids;
+
+    bool apply_contact;
 
 };
 
@@ -500,13 +513,12 @@ connect_mesh_loop (
         const dealii::MeshWorker::AssembleFlags flags)
 {
     // Assert (this->constitutive_model, dealii::ExcNotInitialized());
-    std::cout << "connect_mesh_loop () called" << std::endl;
 
 
     return this->connect_mesh_loop (
-                *(this->constitutive_model_map.at(0)),
+                *(this->constitutive_model_map.at(3)),
                 external_cell_worker,
-                *(this->constitutive_model_map.at(0)),
+                *(this->constitutive_model_map.at(3)),
                 external_boundary_worker,
                 external_copier,
                 signal,

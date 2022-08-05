@@ -25,6 +25,8 @@
 
 // efi headers
 #include <efi/base/logstream.h>
+#include <deal.II/base/tensor.h>
+#include <deal.II/base/point.h>
 #include <efi/grid/geometry.h>
 #include <efi/factory/registry.h>
 #include <efi/lab/sample.h>
@@ -284,6 +286,7 @@ void
 ImportedGeometry<dim>::
 create_triangulation (dealii::Triangulation<dim> &tria)
 {
+        using namespace dealii;
         std::string inputFileName = this->inpFile;
 
         boost::filesystem::path input_directory = 
@@ -304,6 +307,50 @@ create_triangulation (dealii::Triangulation<dim> &tria)
         gridIn.read_ucd(istream);
 
         efilog(Verbosity::verbose) << "New Geometry imported." << std::endl;
+
+        this->setNumberOfCells(tria.n_active_cells());
+        unsigned int num_mat_1 = 0;
+
+        efilog(Verbosity::verbose) << "Creating dirichlet and inhomogeneous boundaries." << std::endl;
+        for (const auto &cell: tria.active_cell_iterators() )
+            for (const auto &face: cell->face_iterators() )
+                if (face->at_boundary())
+                {
+                    if ( (face->center()[0] > 58.5) &&
+                        (face->center()[1] > -15) && (face->center()[1] < -5) &&
+                        (face->center()[2] > -8) && (face->center()[2] < -2))
+                    {
+                    Point<dim> pnt1 = face->vertex(0);
+                    Point<dim> pnt2 = face->vertex(1);
+                    Point<dim> pnt3 = face->vertex(2);
+                    Tensor<1, dim> vector12 = pnt1-pnt2;
+                    Tensor<1, dim> vector23 = pnt2-pnt3;
+                    auto normal = cross_product_3d(vector12,vector23);
+                    normal = normal/normal.norm();
+                    if ( (std::fabs(normal[0]) > std::fabs(normal[1]) ) && 
+                    (std::fabs(normal[0]) > std::fabs(normal[2])) && cell->material_id() != 24)    
+                        {
+                            face->set_boundary_id(1);
+                        }
+                        else {
+                            face->set_boundary_id(3);
+                        }
+                    }
+                    // else if ( (face->center()[0] > 55.5) &&
+                    //     (face->center()[1] > -36.5) && (face->center()[1] < 14.5) &&
+                    //     (face->center()[2] > -34.5) && (face->center()[2] < 20.5))
+                    // {
+                    //     face->set_boundary_id(4);
+                    // }
+                    else if ((face->center()[0] < -8.5))
+                    {
+                        face->set_boundary_id(2);
+                    }
+                    else if (face->boundary_id() == 0)
+                    {
+                        face->set_boundary_id(3);
+                    }
+                }
 
         // this->printMeshInformation(tria);
 }

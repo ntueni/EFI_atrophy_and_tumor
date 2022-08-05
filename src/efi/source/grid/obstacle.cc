@@ -25,7 +25,7 @@ namespace efi {
     template <int dim>
     Obstacle<dim>::Obstacle()
     {
-        std::cout << "Obstacle Created" << std::endl;
+        efilog(Verbosity::verbose) << "Obstacle Created" << std::endl;
         std::vector<double> displacements = {5,5,5};
         this->delta = displacements;
         this->searchTree = new BST<dim>(0);
@@ -36,6 +36,25 @@ namespace efi {
     {
         this->delta = displacements;
         this->delta_set = true;
+    }
+
+    template <int dim>
+    void Obstacle<dim>::set_penalty_parameter(const double penalty)
+    {
+        this->c = penalty;
+    }
+
+
+    template <int dim>
+    double Obstacle<dim>::get_penalty_parameter() const
+    {
+        return this->c;
+    }
+
+    template <int dim>
+    void Obstacle<dim>::set_boundary_file(const std::string & filename)
+    {
+        this->boundary_file = filename;
     }
 
     template <int dim>
@@ -56,7 +75,7 @@ namespace efi {
         std::ofstream out(fileName);
         GridOut       grid_out;
         grid_out.write_vtu(this->testTriangulation, out);
-        // std::cout << " written to " << fileName << std::endl << std::endl;  
+        // efilog(Verbosity::debug) << " written to " << fileName << std::endl << std::endl;  
         // DataOut<spacedim, DoFHandler<spacedim, dim>> data_out;
         // data_out.attach_triangulation(this->testTriangulation);
         // data_out.build_patches();
@@ -71,10 +90,12 @@ namespace efi {
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/ConeUCDBoundary.inp"; 
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/sphereBoundary.inp"; 
         // std::string boundaryFile  = "/calculate/efiSim1F/build/in/imperfectSmoothedSphereV2Boundary.inp";         
-        std::string boundaryFile  = "/calculate/efiSim1F/build/in/TestBrainJune13Boundary.inp"; 
+        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/Brain_model_IndentBoundary.inp"; 
 
-        efi::efilog(Verbosity::normal) << "Importing obstacle from "<< boundaryFile << std::endl;
-        std::ifstream istream(boundaryFile);
+        efilog(Verbosity::verbose) << "Contact will be applied"
+                                << std::endl;
+        efi::efilog(Verbosity::normal) << "Importing obstacle from "<< this->boundary_file << std::endl;
+        std::ifstream istream(this->boundary_file);
         dealii::GridIn<spacedim,dim> gridIn;
         gridIn.attach_triangulation(this->testTriangulation);
         gridIn.read_ucd(istream);
@@ -94,10 +115,9 @@ namespace efi {
     template <int dim>
     void Obstacle<dim>::create_capture_boxes()
     {
-        efi::efilog(Verbosity::verbose) << "Capture boxes entered" << std::endl;
         for( const auto & cell: this->testTriangulation.active_cell_iterators())
         {
-            // std::cout << "face at boundary" << std::endl;
+            // efilog(Verbosity::debug) << "face at boundary" << std::endl;
             Point<dim> lower;
             Point<dim> upper;
             BoundingBox<dim> box = cell->bounding_box();
@@ -111,7 +131,7 @@ namespace efi {
             limits.second = upper;
             std::stringstream ss;
             dealii::CellId cell_id = cell->id();
-            // std::cout << "Capture boxes id: " <<  cell_id.to_string() << std::endl;
+            // efilog(Verbosity::debug) << "Capture boxes id: " <<  cell_id.to_string() << std::endl;
         
             // std::vector<Point<dim>> vertices(4);
             // for (unsigned int v = 0; i < 4; v++)
@@ -141,10 +161,10 @@ namespace efi {
             collectionBoxMap.insert(std::pair<signed int, CollectionBoxes<dim>>(key, boxCollection));
         }
 
-        // std::cout << "Keys in map: \n";
+        // efilog(Verbosity::debug) << "Keys in map: \n";
         // for (auto itr = collectionBoxMap.begin(); itr != collectionBoxMap.end(); itr++ )
-        //   std::cout << itr->first << ", with " << itr->second.size() << " entries\n";
-        // std::cout << std::endl;
+        //   efilog(Verbosity::debug) << itr->first << ", with " << itr->second.size() << " entries\n";
+        // efilog(Verbosity::debug) << std::endl;
 
         for (auto itr = collectionBoxMap.begin(); itr != collectionBoxMap.end(); itr++)
             sortedBoxes.push_back(itr->second);       
@@ -226,7 +246,7 @@ namespace efi {
     {
         int *component = new int(0);
         this->searchTree->search(query_point, component, boxes);
-        // std::cout << boxes.size() << " returned from search" << std::endl;
+        // efilog(Verbosity::debug) << boxes.size() << " returned from search" << std::endl;
     }
 
     template <int dim>
@@ -236,13 +256,13 @@ namespace efi {
         std::vector<CaptureBox<dim>> boxes;
         this->search_tree(slave_pnt, boxes);
         if (print)
-            std::cout << " number of boxes found: " << boxes.size() << std::endl;
+            efilog(Verbosity::debug) << " number of boxes found: " << boxes.size() << std::endl;
         Assert(boxes.size(), dealii::ExcZero());
         std::vector<dealii::CellId> closeCellIds;
         this->find_absolute_closest(slave_pnt, boxes, closeCellIds);
         Assert(closeCellIds.size(), dealii::ExcZero());
         if (print)
-            std::cout << closeCellIds[0] << " was found to be the absolute closest face" << std::endl;
+            efilog(Verbosity::debug) << closeCellIds[0] << " was found to be the absolute closest face" << std::endl;
         
         return this->calculate_min_gap(master_pnt, slave_pnt, closeCellIds, print);        
     }
@@ -253,13 +273,13 @@ namespace efi {
     std::vector<dealii::CellId> & close_cells)
     {
         // Change to find closest node within thte selected close boxes
-        // std::cout  << "Querying point: " << qp << std::endl;
+        // efilog(Verbosity::debug)  << "Querying point: " << qp << std::endl;
         std::map<double, dealii::CellId> distance_to_cell;
         dealii::CellId minFaceId;
         for (const auto box : close_boxes)
         {
             const dealii::CellId id = box.getCellId();
-            // std::cout << " Cell_Id: " << id.to_string() << std::endl;
+            // efilog(Verbosity::debug) << " Cell_Id: " << id.to_string() << std::endl;
             const auto cell = this->testTriangulation.create_cell_iterator(id);
 
             auto centroid = cell->center();
@@ -285,7 +305,7 @@ namespace efi {
         int cellNo = 0;
         dealii::CellId cellId = closeFaces[cellNo];
         if (print)
-            std::cout << "Finding min gap between point and face: " << cellId.to_string() <<std::endl;
+            efilog(Verbosity::debug) << "Finding min gap between point and face: " << cellId.to_string() <<std::endl;
         bool converged = false;
         double deltazi = 0.;
         bool newZi = false;
@@ -349,7 +369,7 @@ namespace efi {
             while (!converged && iter < 20)
             {
                 if (print)
-                    std::cout  << "iter: " << iter << std::endl;
+                    efilog(Verbosity::debug)  << "iter: " << iter << std::endl;
                 delta_guess = 0.;
                 dNdAlpha[0] = 0.;
                 dNdAlpha[1] = 0.;
@@ -383,9 +403,9 @@ namespace efi {
                 initial_guess(0) += delta_guess(0);
                 initial_guess(1) += delta_guess(1);
                 iter++;
-                // std::cout << initial_guess << std::endl;
-                // std::cout << "rhs norm: " << rhs.l2_norm() << std::endl;
-                // std::cout << "initial_guess(1): " << initial_guess(1) << std::endl;
+                // efilog(Verbosity::debug) << initial_guess << std::endl;
+                // efilog(Verbosity::debug) << "rhs norm: " << rhs.l2_norm() << std::endl;
+                // efilog(Verbosity::debug) << "initial_guess(1): " << initial_guess(1) << std::endl;
                 if (rhs.l2_norm() < tol)
                     converged = true;
             }
@@ -402,42 +422,42 @@ namespace efi {
                     if (!newZi)
                     {
                         if (print)
-                            std::cout << "Poor convergence at first zi on cell " << cellId.to_string() << std::endl;
+                            efilog(Verbosity::debug) << "Poor convergence at first zi on cell " << cellId.to_string() << std::endl;
                         deltazi = 0.7;
                         newZi = true;
                         cellNo++;
                     } else
                     {     
                         if (print) 
-                            std::cout << "Still poor no convergence at a different zi for cell " << cellId.to_string() << std::endl;
+                            efilog(Verbosity::debug) << "Still poor no convergence at a different zi for cell " << cellId.to_string() << std::endl;
                         deltazi = 0.0; 
                         newZi = false;            
                         cellId = closeFaces[cellNo];
                     }
                     if (print) 
                         {
-                            std::cout << "iterations: " << iter << std::endl;
-                            std::cout << "cellNo: " << cellId.to_string() << std::endl;
-                            std::cout << "gap: " << gap << std::endl;
-                            std::cout << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
-                            std::cout << "node_coords = [ " << nodes_coords[0] << ";\n\t";
-                            std::cout << nodes_coords[1] << ";\n\t";
-                            std::cout << nodes_coords[2] << ";\n\t";
-                            std::cout << nodes_coords[3] << "];" << std::endl;
+                            efilog(Verbosity::debug) << "iterations: " << iter << std::endl;
+                            efilog(Verbosity::debug) << "cellNo: " << cellId.to_string() << std::endl;
+                            efilog(Verbosity::debug) << "gap: " << gap << std::endl;
+                            efilog(Verbosity::debug) << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
+                            efilog(Verbosity::debug) << "node_coords = [ " << nodes_coords[0] << ";\n\t";
+                            efilog(Verbosity::debug) << nodes_coords[1] << ";\n\t";
+                            efilog(Verbosity::debug) << nodes_coords[2] << ";\n\t";
+                            efilog(Verbosity::debug) << nodes_coords[3] << "];" << std::endl;
                         }
                 } else if (cellNo>0)
                 {
                     if (print) 
                     {
-                        std::cout << "Convergence for next cell" << std::endl;
-                        std::cout << "iterations: " << iter << std::endl;
-                        std::cout << "cellNo: " << cellId.to_string() << std::endl;
-                        std::cout << "gap: " << gap << std::endl;
-                        std::cout << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
-                        std::cout << "node_coords = [ " << nodes_coords[0] << ";\n\t";
-                        std::cout << nodes_coords[1] << ";\n\t";
-                        std::cout << nodes_coords[2] << ";\n\t";
-                        std::cout << nodes_coords[3] << "];" << std::endl;
+                        efilog(Verbosity::debug) << "Convergence for next cell" << std::endl;
+                        efilog(Verbosity::debug) << "iterations: " << iter << std::endl;
+                        efilog(Verbosity::debug) << "cellNo: " << cellId.to_string() << std::endl;
+                        efilog(Verbosity::debug) << "gap: " << gap << std::endl;
+                        efilog(Verbosity::debug) << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
+                        efilog(Verbosity::debug) << "node_coords = [ " << nodes_coords[0] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[1] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[2] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[3] << "];" << std::endl;
                     }
                     deltazi = 0.;
                     newZi = false;
@@ -449,17 +469,17 @@ namespace efi {
             else
             {
                 if (print) 
-                    std::cout << "No convergence achieved for cell " << cellId.to_string();
+                    efilog(Verbosity::debug) << "No convergence achieved for cell " << cellId.to_string();
                 if (cellNo < (closeFaces.size()-1) || newZi)
                 {
                     if (print) 
                     {
-                        std::cout << " at new zi value" << std::endl;
-                        std::cout << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
-                        std::cout << "node_coords = [ " << nodes_coords[0] << ";\n\t";
-                        std::cout << nodes_coords[1] << ";\n\t";
-                        std::cout << nodes_coords[2] << ";\n\t";
-                        std::cout << nodes_coords[3] << "];" << std::endl;
+                        efilog(Verbosity::debug) << " at new zi value" << std::endl;
+                        efilog(Verbosity::debug) << "slave_pnt = [ " << slave_pnt << "];" << std::endl;
+                        efilog(Verbosity::debug) << "node_coords = [ " << nodes_coords[0] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[1] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[2] << ";\n\t";
+                        efilog(Verbosity::debug) << nodes_coords[3] << "];" << std::endl;
                     }
                     deltazi = 0.;
                     newZi = false;
@@ -469,12 +489,12 @@ namespace efi {
                 else if (!newZi)
                 {
                     if (print) 
-                        std::cout << " at original zi value, trying new zi value" << std::endl;
+                        efilog(Verbosity::debug) << " at original zi value, trying new zi value" << std::endl;
                     deltazi = 0.7;
                     newZi = true;
                 } else 
                 {
-                    std::cout <<"PROBLEM: NO convergence for any senario" << std::endl;
+                    efilog(Verbosity::debug) <<"PROBLEM: NO convergence for any senario" << std::endl;
                     return false;
                 }
             }
@@ -485,7 +505,7 @@ namespace efi {
     // template <int dim>
     // void Obstacle<dim>::create_dof_map()
     // {
-    //     // std::cout << "Entered create dof map" << std::endl;
+    //     // efilog(Verbosity::debug) << "Entered create dof map" << std::endl;
     //     // this->dof_handler = &sample.get_dof_handler();
     //     // const auto &sample_fe = this->dof_handler->get_fe();
 
@@ -513,18 +533,18 @@ namespace efi {
     //                 this->find_faces(slave_pnt,close_faces);
     //                 if (index == 0)
     //                 {
-    //                     std::cout << "index: " << index << std::endl;
-    //                     std::cout << "slave point: " << slave_pnt << std::endl;
+    //                     efilog(Verbosity::debug) << "index: " << index << std::endl;
+    //                     efilog(Verbosity::debug) << "slave point: " << slave_pnt << std::endl;
     //                     }
     //                 this->dof_to_closest_faces_map.insert(std::make_pair(index,close_faces));
     //             }
     //         }
     //     }
         
-    //     // std::cout << "Keys in map: \n";
+    //     // efilog(Verbosity::debug) << "Keys in map: \n";
     //     // for (auto itr = this->dof_to_closest_faces_map.begin(); itr != this->dof_to_closest_faces_map.end(); itr++ )
     //     //   if (itr->first == 0)
-    //     //     std::cout << itr->first << ", with " << itr->second.size() << " cells\n";
+    //     //     efilog(Verbosity::debug) << itr->first << ", with " << itr->second.size() << " cells\n";
 
     // }
 

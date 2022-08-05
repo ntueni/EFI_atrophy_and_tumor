@@ -18,6 +18,7 @@
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/physics/elasticity/kinematics.h>
+#include <deal.II/fe/fe_values_extractors.h>
 //#include <deal.II/meshworker/mesh_loop.h>
 
 // efi headers
@@ -135,6 +136,13 @@ declare_parameters (dealii::ParameterHandler &prm)
                 "options: 'auto' or integer values > 0");
     prm.leave_subsection ();
 
+    // quadrature related parameters
+    prm.enter_subsection ("contact");
+        prm.declare_entry ("apply contact","false",Patterns::Bool());
+        prm.declare_entry ("penalty","1", Patterns::Double());
+        prm.declare_entry ("boundary file","",Patterns::FileName());
+    prm.leave_subsection ();
+
     // just some output
     efilog(Verbosity::verbose) << "Sample finished declaring parameters"
                                << std::endl;
@@ -176,6 +184,26 @@ parse_parameters (dealii::ParameterHandler &prm)
 
         this->qf_cell.reset (new QuadratureSelector<dim>  (quadrature_str,order));
         this->qf_face.reset (new QuadratureSelector<dim-1>(quadrature_str,order));
+    prm.leave_subsection ();
+
+    // contact related parameters
+    prm.enter_subsection ("contact");
+        this->apply_contact =  prm.get_bool ("apply contact");
+        auto penalty_parameter = prm.get_double ("penalty");
+
+        auto boundary_filename = prm.get ("boundary file");
+        this->obstacle->set_penalty_parameter(penalty_parameter);
+
+        boost::filesystem::path input_directory = 
+                GlobalParameters::get_input_directory();
+
+        // input directory
+        std::string directory (input_directory.string()
+                            + std::string(1,input_directory.separator));
+
+        // common name of the output files
+        std::string name (directory + boundary_filename);
+        this->obstacle->set_boundary_file(name);
     prm.leave_subsection ();
 
     // just some output
@@ -254,11 +282,8 @@ instantiate (std::istream &unprocessed_input)
 {
     using namespace dealii;
 
-
     unsigned int n_mpi_processes =
             Utilities::MPI::n_mpi_processes(mpi_communicator);
-
-    std::cout << "Number of processors: " << n_mpi_processes << std::endl;
 
     //TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
@@ -271,7 +296,7 @@ instantiate (std::istream &unprocessed_input)
         std::string type = specs.get("type");
 
         efilog(Verbosity::quiet) << "Type: " << type << std::endl;
-        efilog(Verbosity::quiet) << "Material_id: " << material_id << std::endl;
+        efilog(Verbosity::verbose) << "Material_id: " << material_id << std::endl;
 
         this->constitutive_model_map.emplace (
                 specs.get_integer("material_id"),
@@ -319,9 +344,6 @@ instantiate (std::istream &unprocessed_input)
     // just some output
     efilog(Verbosity::verbose) << "Sample parses unprocessed input."
                                << std::endl;
-
-    
-    std::cout << "sample instantiate  completed" << std::endl;
 }
 
 
@@ -381,17 +403,8 @@ initialize ()
     // The geometry requires the dof_handler to be initialized.
     this->geometry->connect_constraints (*this);
 
-    // Create contact geometry
-    if (GlobalParameters::contact_enabled())
-        {
-            this->obstacle->create();
-            efilog(Verbosity::very_verbose) << "Contact will be applied"
-                                    << std::endl;
-        }
-    else {
-            efilog(Verbosity::very_verbose) << "No contact will be applied"
-                                    << std::endl;
-        }
+    if (this->apply_contact)
+        this->obstacle->create();
 
     // Find the set of locally owned dofs.
     this->locally_owned_dofs = this->dof_handler.locally_owned_dofs ();
@@ -445,6 +458,14 @@ reset()
             this->locally_owned_dofs,
             this->mpi_communicator);
 
+    this->uncondensed_rhs.reinit (
+            this->locally_owned_dofs,
+            this->mpi_communicator);
+
+    this->diag_mass_matrix_vector.reinit (
+            this->locally_owned_dofs,
+            this->mpi_communicator);
+
     // Initialize the history data
     this->cell_data_history_storage->initialize (
             this->dof_handler.active_cell_iterators());
@@ -461,8 +482,8 @@ reinit_constraints ()
     this->constraints.clear ();
     this->constraints.reinit (this->locally_relevant_dofs);
 
-    dealii::DoFTools::make_hanging_node_constraints (this->dof_handler,
-                                                     this->constraints);
+    // dealii::DoFTools::make_hanging_node_constraints (this->dof_handler,
+    //                                                  this->constraints);
 
     this->signals.make_constraints (this->constraints);
 
@@ -574,8 +595,58 @@ reinit_sparsity ()
                                dynamic_sparsity_pattern,
                                this->mpi_communicator);
 
+    this->diag_mass_matrix_vector.reinit(this->locally_owned_dofs,this->mpi_communicator);
+
     // Free storage.
     dynamic_sparsity_pattern.reinit (0,0);
+
+    // Assemble mass matrix
+    efilog(Verbosity::verbose) << "Assembling mass matrix"
+                               << std::endl;
+    LA::MPI::SparseMatrix &mass_matrix = this->system_matrix;
+    QGaussLobatto<dim - 1> face_quadrature_formula(1+1);
+    FEFaceValues<dim> fe_values_face(*fe,
+                                     face_quadrature_formula,
+                                     update_values | update_JxW_values);
+
+    const unsigned int dofs_per_cell = this->fe->n_dofs_per_cell();
+    const unsigned int n_face_q_points = face_quadrature_formula.size();
+
+    const FEValuesExtractors::Vector displacement(0);
+
+    FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+    for (const auto & cell: dof_handler.active_cell_iterators())
+        if (cell->is_locally_owned())
+            for (const auto & face: cell->face_iterators())
+                if (face->at_boundary() && face->boundary_id() == 3)
+                    {
+                        fe_values_face.reinit(cell, face);
+                        cell_matrix = 0;
+
+                        for (unsigned int q_point = 0; q_point < n_face_q_points; q_point++)
+                            for (unsigned int i = 0; i < dofs_per_cell; i++)
+                                {
+                                    cell_matrix(i,i) += (fe_values_face[displacement].value(i, q_point) * 
+                                                        fe_values_face[displacement].value(i, q_point) *
+                                                        fe_values_face.JxW(q_point));
+                                }
+                        cell->get_dof_indices(local_dof_indices);
+
+                        for (unsigned int i = 0; i< dofs_per_cell; i++)
+                            mass_matrix.add(local_dof_indices[i], local_dof_indices[i], cell_matrix(i,i));
+                    }
+    mass_matrix.compress(VectorOperation::add);
+
+    const unsigned int start = this->system_vector.local_range().first;
+    const unsigned int end = this->system_vector.local_range().second;
+    for (unsigned int j = start; j < end; j++)
+        this->diag_mass_matrix_vector(j) = mass_matrix.diag_element(j);
+        
+    this->diag_mass_matrix_vector.compress(VectorOperation::insert);
+
+    mass_matrix = 0;
 
     // Notify us know if this was successful.
     efilog(Verbosity::verbose) << "Sample finished initializing the"
@@ -583,10 +654,11 @@ reinit_sparsity ()
                                << std::endl;
 }
 
+
 template <int dim>
 void    
 Sample<dim>::
-apply_contact_constraints (const unsigned int stepNo, const bool apply, const bool printData)
+apply_contact_constraints (const unsigned int stepNo, const bool printData)
 {
     using namespace dealii;
 
@@ -598,12 +670,32 @@ apply_contact_constraints (const unsigned int stepNo, const bool apply, const bo
     LA::MPI::Vector distributed_solution(
             this->locally_owned_dofs,
             this->mpi_communicator);
-
+            
     distributed_solution = this->locally_relevant_solution;
+            
+    LA::MPI::Vector diag_mm_vector_relvent(   
+            this->locally_relevant_dofs,
+            this->mpi_communicator);
+
+    diag_mm_vector_relvent = this->diag_mass_matrix_vector;
+            
+    LA::MPI::Vector lambda(   
+            this->locally_relevant_dofs,
+            this->mpi_communicator);
+
+    lambda = this->uncondensed_rhs;
+            
+    LA::MPI::Vector residual(   
+            this->locally_relevant_dofs,
+            this->mpi_communicator);
+
+    residual = this->system_vector;
 
     this->contact_constraints.reinit(this->locally_relevant_dofs);
 
-if (apply)
+    this->active_set.clear();
+if (this->apply_contact)
+
     {// QGaussLobatto<dim-1> face_quadrature(this->fe->degree + 1);
     Quadrature<dim-1> face_quadrature(this->fe->get_unit_face_support_points());
     FEFaceValues<dim> fe_values_face(*fe, face_quadrature, update_quadrature_points |
@@ -615,99 +707,233 @@ if (apply)
 
     std::vector<types::global_dof_index> dof_indices(dofs_per_face);
 
-    if (stepNo > 0)
-        for (const auto & cell : dof_handler.active_cell_iterators())
-            if(!cell->is_artificial() && cell->at_boundary())
-                for (const auto & face : cell->face_iterators())
-                    if (face->at_boundary() && (face->boundary_id() == this->obstacle->get_contact_boundary_id()) )
+    bool display = true;
+    
+    double c = this->obstacle->get_penalty_parameter();
+    // efi::efilog(Verbosity::verbose) << "penalty parameter: " << c << std::endl;
+    double max_change = 0;
+    for (const auto & cell : dof_handler.active_cell_iterators())
+        if(!cell->is_artificial() && cell->at_boundary())
+            for (const auto & face : cell->face_iterators())
+                if (face->at_boundary() && (face->boundary_id() == this->obstacle->get_contact_boundary_id()) )
+                    {
+                        fe_values_face.reinit(cell, face);
+                        face->get_dof_indices(dof_indices);
+                        std::vector<Tensor<2, dim>> grad_u(n_face_q_points);
+                        fe_values_face[displacements].get_function_gradients(this->locally_relevant_solution, grad_u);
+                        for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
                         {
-                            fe_values_face.reinit(cell, face);
-                            face->get_dof_indices(dof_indices);
-                            std::vector<Tensor<2, dim>> grad_u(n_face_q_points);
-                            fe_values_face[displacements].get_function_gradients(this->locally_relevant_solution, grad_u);
-                            for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
-                            {
-                                const int index = dof_indices[q_point];                            
-                                if (touched_dofs[index] == false)
-                                { 
-                                    std::vector<types::global_dof_index> vertex_dof_indices(&dof_indices[q_point],(&dof_indices[q_point])+dim);
-                                    if (!constraints.is_constrained(vertex_dof_indices[0]) 
-                                            || !constraints.is_constrained(vertex_dof_indices[1])
-                                            || !constraints.is_constrained(vertex_dof_indices[2]))
+                            const int index = dof_indices[q_point];                            
+                            if (touched_dofs[index] == false)
+                            { 
+                                std::vector<types::global_dof_index> vertex_dof_indices(&dof_indices[q_point],(&dof_indices[q_point])+dim);
+                                if (!constraints.is_constrained(vertex_dof_indices[0]) 
+                                    && !constraints.is_constrained(vertex_dof_indices[1])
+                                    && !constraints.is_constrained(vertex_dof_indices[2]))
+                                {
+                                    // std::cout << "face_vertex: index " << index << std::endl;
+                                    // Need to calculate normal vector of displaced body 
+                                    //      n = J*F_inv*N (N = undeformed normal vector, J = det(F))
+                                    Tensor<2,dim> F = Physics::Elasticity::Kinematics::F(grad_u[q_point]); // deformation gradient at quad point
+                                    Tensor<2,dim> F_inv = invert(F);
+                                    double J = determinant(F);
+                                    Tensor<1,dim> normal_vector =  fe_values_face.normal_vector(q_point);
+
+                                    Tensor<1,dim> def_normal_vector = J*transpose(F_inv)*normal_vector;
+                                    def_normal_vector = def_normal_vector/def_normal_vector.norm();
+
+                                    touched_dofs[index] = true;
+                                    Point<dim> support_pnt = fe_values_face.quadrature_point(q_point);
+                                    Point<dim> slave_pnt = support_pnt;
+
+                                    Tensor<1,dim> def_at_point;
+                                    Tensor<1,dim> lamda_at_point;
+                                    Tensor<1,dim> mass_matrix_at_point;
+                                    Tensor<1,dim> contact_force;
+                                    Tensor<1,dim> residual_at_point;
+                                    for (unsigned int v_index=0; v_index<dim;v_index++)
                                     {
+                                        const unsigned int vertex_dof_index = vertex_dof_indices[v_index];
 
-                                        // std::cout << "cell id: " << cell->id() << std::endl;
-                                        // std::cout << "face_vertex: index " << index << std::endl;
-                                        // Need to calculate normal vector of displaced body 
-                                        //      n = J*F_inv*N (N = undeformed normal vector, J = det(F))
-                                        Tensor<2,dim> F = Physics::Elasticity::Kinematics::F(grad_u[q_point]); // deformation gradient at quad point
-                                        Tensor<2,dim> F_inv = invert(F);
-                                        double J = determinant(F);
-                                        Tensor<1,dim> normal_vector =  fe_values_face.normal_vector(q_point);
-                                        Tensor<1,dim> def_normal_vector = J*transpose(F_inv)*normal_vector;
+                                        slave_pnt(v_index) += this->locally_relevant_solution(vertex_dof_index);
+                                        def_at_point[v_index] = this->locally_relevant_solution(vertex_dof_index);
+                                        contact_force[v_index] = lambda(vertex_dof_index)/diag_mm_vector_relvent(vertex_dof_index);
+                                        lamda_at_point[v_index] = lambda(vertex_dof_index);
+                                        mass_matrix_at_point[v_index] = diag_mm_vector_relvent(vertex_dof_index);
+                                        residual_at_point[v_index] = residual(vertex_dof_index);
+                                    }
 
-                                        touched_dofs[index] = true;
-                                        Point<dim> support_pnt = fe_values_face.quadrature_point(q_point);
-                                        Point<dim> slave_pnt = support_pnt;
+                                    double u_dot_n = scalar_product(def_at_point,def_normal_vector);
+                                    double force_at_point = scalar_product(contact_force,def_normal_vector);
+                                      
 
-                                        Tensor<1,dim> def_at_point;
-                                        for (unsigned int v_index=0; v_index<dim;v_index++)
+                                    if ( (force_at_point + c*(u_dot_n)) > 0)
+                                    {    
+                                        if ((force_at_point + c*(u_dot_n)) > max_change)
+                                            max_change = (force_at_point + c*(u_dot_n));
+
+                                        Point<dim> master_pnt; 
+                                        bool print = false;
+                                        // Find min gap distance (and mater _pnt) to contact surface 
+                                        bool applySurfaceConstraint = this->obstacle->find_master_pnt(slave_pnt, master_pnt, print);
+                                        
+                                        if (display)
                                         {
-                                            const unsigned int vertex_dof_index = vertex_dof_indices[v_index];
-                                            slave_pnt(v_index) += this->locally_relevant_solution(vertex_dof_index);
-                                            def_at_point[v_index] = this->locally_relevant_solution(vertex_dof_index);
+                            
+                                            efi::efilog(Verbosity::verbose) << "residual from system vector: " 
+                                                                            << residual_at_point << std::endl; 
+
+                                            efi::efilog(Verbosity::verbose) << "contact force: " 
+                                                                            << force_at_point << std::endl;
+
+                                            efi::efilog(Verbosity::verbose) << "displacement: " 
+                                                                        << u_dot_n << std::endl;
+
+                                            efi::efilog(Verbosity::verbose) << "slave point: " 
+                                                                        << slave_pnt << std::endl; 
+
+                                            efi::efilog(Verbosity::verbose) << "master point: " 
+                                                                            << master_pnt << std::endl; 
+
+                                            efi::efilog(Verbosity::verbose) << "constrained solution: " 
+                                                                            << (master_pnt - support_pnt) << std::endl;                                         
+                                            display = false; 
                                         }
-
-                                        double u_dot_n = scalar_product(def_at_point,def_normal_vector);
-
-                                        if ( std::fabs(u_dot_n) > 1e-9)
+                                        for (unsigned int i = 0; i<vertex_dof_indices.size(); i++)  
                                         {
-                                                Point<dim> master_pnt;
-                                                bool print = false;
-                                                // Find min gap distance (and mater _pnt) to contact surface 
-                                                bool applySurfaceConstraint = this->obstacle->find_master_pnt(slave_pnt, master_pnt, print); 
-                                                if (applySurfaceConstraint)
-                                                {
-                                                    Tensor<1,dim> constrained_solution = master_pnt - support_pnt;
-                                                    for (unsigned int i = 0; i<vertex_dof_indices.size(); i++)
-                                                    {
-                                                        unsigned int idx = vertex_dof_indices[i];
-                                                        if (!constraints.is_constrained(idx))
-                                                        // Add constraint
-                                                        this->contact_constraints.add_line(idx);
-                                                        this->contact_constraints.set_inhomogeneity(idx, 0);
-                                                        // Change distibuted solution
-                                                        distributed_solution(idx) = constrained_solution[i];
-                                                        if (constrained_solution[i]>0.0001 || constrained_solution[i]<-0.0001)
-                                                        {
-                                                            // std::cout << "constrained_solution: " << constrained_solution << std::endl;
-                                                            // std::cout << "idx: " << idx << std::endl;
-                                                            // std::cout << "support_pnt: " << support_pnt << std::endl;
-                                                            // std::cout << "slave_pnt: " << slave_pnt << std::endl;
-                                                            // std::cout << "master_pnt: " << master_pnt << std::endl;
-                                                        }
-                                                    }
-                                                    if (print)
-                                                        std::cout << "Finished" << std::endl;
-                                                } 
-                                                // else {
-                                                    // std::cout << "Index: " << index << " at point " << slave_pnt << "will not be constrained" << std::endl;
-                                                // }
+                                            unsigned int idx = vertex_dof_indices[i];
+                                            Tensor<1,dim> constrained_solution = master_pnt - support_pnt;
+                                            
+                                            // Add constraint
+                                            this->contact_constraints.add_line(idx);
+                                            this->contact_constraints.set_inhomogeneity(idx, 0);
+                                            // Change distibuted solution
+                                            distributed_solution(idx) = constrained_solution[i];
+                                            // Add to active_set
+                                            this->active_set.add_index(idx); 
                                         }
                                     }
                                 }
                             }
                         }
-        
+                    }
+    
     distributed_solution.compress(VectorOperation::insert);
-    this->locally_relevant_solution = distributed_solution;
+    this->locally_owned_solution = distributed_solution;
 
-    efilog(Verbosity::debug) << "Contact Applied."
-                                                  << std::endl;
+    efi::efilog(Verbosity::normal) << "ACC | Active set size: " 
+                                << this->active_set.n_elements() << std::endl;
     }
     this->contact_constraints.close();
     this->contact_constraints.merge(this->constraints);    
 }
+
+template <int dim>
+void
+Sample<dim>::
+compute_residual()
+{
+    
+    using namespace dealii;
+
+    TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
+
+    Assert (this->boundary_worker,     ExcNotInitialized());
+    Assert (this->cell_worker,         ExcNotInitialized());
+    // Assert (this->constitutive_model,  ExcNotInitialized());
+    // Assert (this->constitutive_model_map,  ExcNotInitialized());
+    Assert (this->sample_scratch_data, ExcNotInitialized());
+    Assert (this->sample_copy_data,    ExcNotInitialized());
+
+    // reset system matrix and rhs
+    system_matrix = 0;
+    uncondensed_rhs = 0;
+    
+    using CellIteratorType = decltype(this->dof_handler.begin_active());
+
+    // Loop over material types and set up system?
+    auto cell_woker =
+            [&](const CellIteratorType &cell,
+                ScratchData<dim>       &scratch_data,
+                CopyData               &copy_data)
+                {
+                    if (this->state == State::failure)
+                        return;
+                    try
+                    {
+                        this->cell_worker->fill (
+                              *(this->constitutive_model_map.at(cell->material_id())),
+                                this->locally_relevant_solution,
+                                cell,
+                                scratch_data,
+                                copy_data);
+                    }
+                    catch (ExceptionBase &exec)
+                    {
+                        this->state = State::failure;
+                        efilog(Verbosity::normal) << "CellWorker failed."
+                                                  << std::endl;
+                    }
+                };
+
+
+    auto boundary_woker =
+            [&](const CellIteratorType &cell,
+                const unsigned int      face_no,
+                ScratchData<dim>       &scratch_data,
+                CopyData               &copy_data)
+                {
+                    if (this->state == State::failure)
+                        return;
+                    try
+                    {
+                        this->boundary_worker->fill (
+                                DataProcessorDummy (),
+                                this->locally_relevant_solution,
+                                cell,
+                                face_no,
+                                scratch_data,
+                                copy_data);
+                    }
+                    catch (ExceptionBase &exec)
+                    {
+                        this->state = State::failure;
+                        efilog(Verbosity::normal) << "BoundaryWorker failed."
+                                                  << std::endl;
+                    }
+                };
+
+    
+    auto copier = create_residual_data_copier (
+                        this->uncondensed_rhs,
+                        this->system_matrix,
+                        this->state,
+                        this->constraints);
+
+    mesh_loop (this->dof_handler.begin_active(),
+               this->dof_handler.end(),
+               cell_woker,
+               copier,
+               *(this->sample_scratch_data),
+               *(this->sample_copy_data),
+               MeshWorker::assemble_own_cells
+                | MeshWorker::assemble_boundary_faces
+               | MeshWorker::cells_after_faces,
+               boundary_woker);
+
+    // }
+    // Perform all reduce the state such that the state
+    // is consistent for all processors.
+    this->all_reduce_state ();
+
+    system_matrix.compress(VectorOperation::add);
+    uncondensed_rhs.compress(VectorOperation::add);
+
+    // just some output
+    if (this->state == State::success)
+        efilog(Verbosity::normal) << "CR | " << std::endl;
+}
+
 
 template <int dim>
 void
@@ -784,6 +1010,7 @@ assemble ()
                     }
                 };
 
+    
     auto copier = create_assembly_data_copier (
                         this->system_vector,
                         this->system_matrix,
@@ -826,7 +1053,7 @@ solve_linear ()
     TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
     ReductionControl linear_solver_control (
-            1000, 1e-10, 1e-12, /*log_history*/ false, /*log_result*/ false);
+            10000, 1e-10, 1e-12, /*log_history*/ false, /*log_result*/ false);
 
     if (this->solver_control.get_linear_solver_type() == "direct")
     {
@@ -839,8 +1066,9 @@ solve_linear ()
             solver.initialize (this->system_matrix);
             solver.solve (this->system_increment, this->system_vector);
         }
-        catch (ExceptionBase &)
+        catch (ExceptionBase & e)
         {
+            efilog(Verbosity::debug) << e.what() << std::endl;
             this->state = State::failure;
         }
     }
@@ -859,8 +1087,9 @@ solve_linear ()
                          this->system_vector,
                          preconditioner);
         }
-        catch (ExceptionBase &)
+        catch (ExceptionBase & e)
         {
+            efilog(Verbosity::debug) << e.what() << std::endl;
             this->state = State::failure;
         }
     }
@@ -879,8 +1108,9 @@ solve_linear ()
                          this->system_vector,
                          preconditioner);
         }
-        catch (ExceptionBase &)
+        catch (ExceptionBase &e)
         {
+            efilog(Verbosity::debug) << e.what() << std::endl;
             this->state = State::failure;
         }
     }
@@ -908,6 +1138,10 @@ Sample<dim>::
 solve_nonlinear (bool printValue)
 {
     using namespace dealii;
+
+    LA::MPI::Vector residual(   
+            this->locally_owned_dofs,
+            this->mpi_communicator);
 
     unsigned int step  = 0;
 
@@ -938,7 +1172,12 @@ solve_nonlinear (bool printValue)
     // Set the time step size
     ScratchDataTools::get_or_add_time_step_size (
             *(this->sample_scratch_data)) = this->time_step_size;
+    
+    // Set up active set
+    this->active_set.clear();
+    this->active_set.set_size(this->dof_handler.n_dofs());
 
+    IndexSet old_active_set(active_set);
     do
     {
         // Get the locally relevant solution with
@@ -946,19 +1185,11 @@ solve_nonlinear (bool printValue)
         // locally relevant solution.
         this->locally_relevant_solution = this->locally_owned_solution;
 
-        bool const apply_contact = GlobalParameters::contact_enabled();
-        this->apply_contact_constraints (step, apply_contact, printValue); 
+        this->apply_contact_constraints (step, printValue); 
 
-        // this->obstacle->print_surface("/calculate/efiSim1F/build/in/Problem-cells.vtu");
+        this->locally_relevant_solution = this->locally_owned_solution;
 
         this->all_reduce_state ();
-        if (apply_contact)
-        {
-            efilog(Verbosity::debug)
-                    <<  "Contact Constraints applied" << std::endl;
-            efilog(Verbosity::debug)
-                    <<  "Cells at boundary 4: " << Obstacle<dim>::cellCount << std::endl;
-        }
 
         Obstacle<dim>::cellCount = 0;
         this->assemble ();
@@ -967,18 +1198,59 @@ solve_nonlinear (bool printValue)
         if (this->state != State::success)
             break;
 
-        // Check if convergence is obtained.
-        if (this->solver_control.check (step++, this->system_vector.l2_norm())
-                != State::iterate)
-            break;
-
         this->solve_linear ();
+
         // Check if a linear solver error occurred.
         if (this->state != State::success)
             break;
 
         // Update the locally owned solution.
         this->locally_owned_solution += this->system_increment;
+        this->locally_relevant_solution = this->locally_owned_solution;
+        
+        double res_norm = this->system_vector.l2_norm();
+
+        this->all_reduce_state ();
+        if (this->apply_contact)
+        {
+            this->compute_residual();
+            // Remove indices from system_vector that are in the active set
+            // LA::MPI::Vector temp_contact_force (this->uncondensed_rhs);
+            residual = this->uncondensed_rhs;
+            const unsigned int start_res = (residual.local_range().first),
+                                end_res = (residual.local_range().second);
+            for (unsigned int n = start_res; n < end_res; ++n)
+                if (this->active_set.is_element(n) || this->contact_constraints.is_inhomogeneously_constrained(n))
+                {
+                    residual(n) = 0;
+                } 
+                // else if (!this->active_set.is_element(n))
+                // {
+                //     temp_contact_force(n) = 0;
+                // }
+            residual.compress(VectorOperation::insert);
+            // temp_contact_force.compress(VectorOperation::insert);
+            res_norm = residual.l2_norm();
+            // const double force_norm = temp_contact_force.l2_norm();
+            // const double system_norm = this->system_vector.l2_norm();
+            // efilog(Verbosity::debug) << "residual norm: " << res_norm << std::endl;
+            // efilog(Verbosity::debug) << "temp_contact_force norm: " << force_norm << std::endl;
+            // efilog(Verbosity::debug) <<  "num_non_zero_res = " << num_non_zero_res << std::endl;
+        }
+
+        // Check if convergence is obtained.
+
+        if ((this->solver_control.check (step++, res_norm)
+                != State::iterate) )
+            {
+                // if (Utilities::MPI::sum( (active_set == old_active_set) ? 0 : 1, this->mpi_communicator) == 0)
+                // {
+                    // efilog(Verbosity::normal) << "Full Convergence: Active_set did not change"<< std::endl;
+                        break;
+                // } 
+            }
+        old_active_set = this->active_set;       
+
     } while (true);
 
     // If the nonlinear solver was successful, update the solution fields and
@@ -1020,6 +1292,9 @@ write_output (const unsigned int step,
 
     TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
+    //move_mesh
+    // this->move_mesh(this->locally_relevant_solution);
+
     unsigned int n_mpi_processes =
             Utilities::MPI::n_mpi_processes(mpi_communicator);
 
@@ -1034,6 +1309,31 @@ write_output (const unsigned int step,
     DataOut<dim> out;
     out.attach_dof_handler (dof_handler);
     out.add_data_vector (this->locally_relevant_solution, post_processor);
+
+    // Add Active set
+    LA::MPI::Vector distributed_active_set_vector(this->locally_owned_dofs);
+    distributed_active_set_vector = 0.;
+    for (const auto index: this->active_set)
+        distributed_active_set_vector[index] = 1.;
+    distributed_active_set_vector.compress(VectorOperation::insert);
+    LA::MPI::Vector active_set_vector(this->locally_relevant_dofs);
+    active_set_vector = distributed_active_set_vector;
+    out.add_data_vector(active_set_vector,"active_set");
+
+    // add material_id filter
+    Vector<double> distributed_material_id(tria.n_active_cells());
+    distributed_material_id = 0.;
+    for( const auto cell : tria.active_cell_iterators())
+    {
+        distributed_material_id[cell->active_cell_index()] = cell->material_id();
+    } 
+
+    out.add_data_vector(distributed_material_id,"material_ids");
+    
+
+    // const std::vector<DataComponentInterpretation::DataComponentInterpretation>
+    //     data_component_interpretation(
+    //     dim, DataComponentInterpretation::component_is_part_of_vector);
 
     // get the subdomain IDs
     types::subdomain_id locally_owned_subdomain =
@@ -1108,6 +1408,34 @@ write_output (const unsigned int step,
 
         DataOutBase::write_pvd_record (pvd_output, this->times_and_names);
     }
+
+    //move_mesh
+    // LA::MPI::Vector tmp(this->locally_relevant_solution);
+    // tmp *= -1;
+    // this->move_mesh(tmp);
+}
+
+
+template <int dim>
+void
+Sample<dim>::
+move_mesh(const  LA::MPI::Vector &displacement) const
+{
+    std::vector<bool> vertex_touched(this->tria.n_vertices(), false);
+
+    for(const auto &cell: dof_handler.active_cell_iterators())
+        if (cell->is_locally_owned())
+            for (const auto v: cell->vertex_indices())
+                if (vertex_touched[cell->vertex_index(v)] == false)
+                {
+                    vertex_touched[cell->vertex_index(v)] = true;
+
+                    dealii::Point<dim> vertex_displacement;
+                    for (unsigned int d = 0; d< dim; ++d)
+                        vertex_displacement[d] = displacement(cell->vertex_dof_index(v, d));
+                    cell->vertex(v) += vertex_displacement;
+                }
+    
 }
 
 

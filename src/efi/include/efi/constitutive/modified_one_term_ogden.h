@@ -187,7 +187,7 @@ declare_parameters (dealii::ParameterHandler &prm)
 
     prm.declare_entry ("alpha", "-20", Patterns::Double());
     prm.declare_entry ("mu", "0.7e3", Patterns::Double(0));
-    prm.declare_entry ("bulk modulus", "3.e3", Patterns::Double(0));
+    prm.declare_entry ("poisson ratio", "0.45", Patterns::Double(0));
     prm.declare_entry ("empirical coefficient", "-2.", Patterns::Double());
 
     efilog(Verbosity::verbose) << "ModifiedOneTermOgden constitutive model "
@@ -207,8 +207,13 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     this->alpha = prm.get_double ("alpha");
     this->mu    = prm.get_double ("mu");
-    this->kappa = prm.get_double ("bulk modulus");
+    double nu = prm.get_double ("poisson ratio");
+    this->kappa = 2*this->mu*(1.0+nu)/3.0/(1.0-2.0*nu);
     this->beta  = prm.get_double ("empirical coefficient");
+
+    efilog(Verbosity::verbose) << "kappa value: "
+                               << kappa
+                               << std::endl;
 
     efilog(Verbosity::verbose) << "ModifiedOneTermOgden constitutive model "
                                   "finished parsing parameters."

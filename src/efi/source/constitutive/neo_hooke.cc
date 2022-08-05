@@ -111,6 +111,11 @@ get_data_interpretation () const
             ("kirchoff_stress",position));
     position += data_interpretation.back().n_components();
 
+    data_interpretation.push_back (
+            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>
+            ("strain",position));
+    position += data_interpretation.back().n_components();
+
     return data_interpretation;
 }
 
@@ -128,6 +133,11 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 
     // tensors
     Tensor<2,dim> F;
+    Tensor<2,dim> identity;
+    identity = 0.;
+    identity[0][0] = 1.0;
+    identity[1][1] = 1.0;
+    identity[2][2] = 1.0;
 
     unsigned int position = 0;
 
@@ -143,12 +153,18 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         TensorShape<2,dim> tau (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,2);
 
+        // Strain
+        TensorShape<2,dim> e (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,2);
+
         for(unsigned int i = 0; i < dim; ++i)
         {
             u [i] = input_data.solution_values[q][Extractor<dim>::first_displacement_component+i];
             F [i] = input_data.solution_gradients[q][Extractor<dim>::first_displacement_component+i];
             F [i][i] += 1.0;
         }
+
+        e = 0.5*(transpose(F)*F-identity);
 
         tau = ((this->lambda * log(determinant(F)) - this->mu) * transpose(invert(F)) + this->mu * F)*transpose(F);
     }

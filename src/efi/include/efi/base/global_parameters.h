@@ -66,18 +66,11 @@ public:
     boost::filesystem::path
     get_input_directory ();
 
-    // boost::filesystem::path
-    // get_input_directory ();
-
     /// Return true of false indicating whether we want to generate paraview
     /// output or not.
     static
     bool
     paraview_output_enabled ();
-
-    static
-    bool
-    contact_enabled ();
 
     /// Destructor.
     ~GlobalParameters ();
@@ -114,7 +107,6 @@ private:
     boost::filesystem::path output_path;
     boost::filesystem::path input_path;
     std::string output_filename;
-    bool apply_contact;
 
     /// MPI communicator
     MPI_Comm mpi_communicator;

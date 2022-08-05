@@ -202,6 +202,10 @@ get_data_interpretation () const
             create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
     position += data_interpretation.back().n_components();
 
+    data_interpretation.push_back (
+            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
+    position += data_interpretation.back().n_components();
+
     return data_interpretation;
 }
 
@@ -220,6 +224,11 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 
     // deformation gradient
     Tensor<2,dim,double> F;
+    Tensor<2,dim> identity;
+    identity = 0.;
+    identity[0][0] = 1.0;
+    identity[1][1] = 1.0;
+    identity[2][2] = 1.0;
 
     std::array<double,dim> lambda; // principal stretches
 
@@ -238,12 +247,18 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         TensorShape<2,dim,double> tau (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,2);
 
+        // Lagranigan strain
+        TensorShape<2,dim,double> E (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,2);
+
         for(unsigned int i = 0; i < dim; ++i)
         {
             u [i] = input_data.solution_values[q][Extractor<dim>::first_displacement_component+i];
             F [i] = input_data.solution_gradients[q][Extractor<dim>::first_displacement_component+i];
             F [i][i] += 1.0;
         }
+
+        E = 0.5*(transpose(F)*F-identity);
 
         auto eigen_b = eigenvectors(symmetrize(F*transpose(F)));
 

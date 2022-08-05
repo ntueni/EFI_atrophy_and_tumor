@@ -267,6 +267,14 @@ public:
     void
     accept (GeometryVisitor<dim> &) const override;
 
+    unsigned int numberOfCells;
+
+    // Set number of cells in imported Geometry
+    void setNumberOfCells(unsigned int);
+
+    // Get number of cells in imported Geometry
+    unsigned int getNumberOfCells();
+
     protected:
 
     std::string
@@ -415,6 +423,22 @@ accept (GeometryVisitor<dim> &v) const
     v.visit(*this);
 }
 
+template <int dim>
+unsigned int 
+ImportedGeometry<dim>::
+getNumberOfCells()
+{
+    return this->numberOfCells;
+}
+
+
+template <int dim>
+void
+ImportedGeometry<dim>::
+setNumberOfCells(unsigned int num)
+{
+    this->numberOfCells = num;
+}
 
 /// Function to give mesh information for an imported geometry.
 /// Taken from deal.ii step-49 tutorial
@@ -424,7 +448,7 @@ void
 ImportedGeometry<dim>::
 printMeshInformation (const dealii::Triangulation<dim> &triangulation)
 {
-    std::cout << "Mesh info:" << std::endl
+    efilog(Verbosity::debug) << "Mesh info:" << std::endl
             << " dimension: " << dim << std::endl
             << " no. of cells: " << triangulation.n_active_cells() << std::endl;
 
@@ -433,13 +457,13 @@ printMeshInformation (const dealii::Triangulation<dim> &triangulation)
       if (face->at_boundary())
         boundary_count[face->boundary_id()]++;
 
-    std::cout << " boundary indicators: ";
+    efilog(Verbosity::debug) << " boundary indicators: ";
     for (const std::pair<const dealii::types::boundary_id, unsigned int> &pair :
          boundary_count)
       {
-        std::cout << pair.first << "(" << pair.second << " times) ";
+        efilog(Verbosity::debug) << pair.first << "(" << pair.second << " times) ";
       }
-    std::cout << std::endl;
+    efilog(Verbosity::debug) << "||" << std::endl;
 
 }
 

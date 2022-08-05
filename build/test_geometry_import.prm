@@ -2,7 +2,7 @@ subsection experiment
   set reset = true
 
   subsection testing_device@[type=tension_compression_testing_device,instance=1]
-    set input files = tension_c3
+    set input files = tension_c1_test
   end
 
   subsection sample
@@ -12,98 +12,43 @@ subsection experiment
     end
 
     subsection geometry@[type=import]
-        set inpFile = imperfectSmoothedSphereV2.inp
-      # set inpFile = sphere.inp  
+      # set inpFile = imperfectSmoothedSphereV2.inp
+      set inpFile = sphere.inp  
       # set inpFile = ConeUCD.inp
       # set inpFile = coarseCone.inp
     end   
     
-    subsection constitutive@[type=neo_hooke,instance=1,material_id=0]
-          set young's modulus = 2.1
-          set poisson ratio = 0.40
-    end 
-    
-    
-    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=5]
-          set alpha = -90.
-          set bulk modulus = 500.
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=0]
+          set alpha = 2
+          set poisson ratio = 0.45
           set empirical coefficient = -2.
-          set mu = 20.
-    end 
-        
-    
-    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=100000]
-        subsection constitutive@[type=maxwell_element,instance = 1]
-            set deviatoric viscosity = 100.7 
-            set volumetric viscosity = 100000.       
-            subsection constitutive@[type=modified_one_term_ogden,instance=1]
-                  set alpha = -90.
-                  set bulk modulus = 500.
-                  set empirical coefficient = -2.
-                  set mu = 20.
-            end 
-        end                  
-        subsection constitutive@[type=modified_one_term_ogden,instance=1]
-              set alpha = 33.
-              set bulk modulus = 852.
-              set empirical coefficient = -2.
-              set mu = 88.
-        end
-          
-    end
-        
-    
-    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=50000]
-        subsection constitutive@[type=maxwell_element,instance = 1]
-            set deviatoric viscosity = 100.7 
-            set volumetric viscosity = 100000.       
-            subsection constitutive@[type=modified_one_term_ogden,instance=1]
-                  set alpha = -66.
-                  set bulk modulus = 772.
-                  set empirical coefficient = -2.
-                  set mu = 80.
-            end 
-        end                  
-        subsection constitutive@[type=modified_one_term_ogden,instance=1]
-              set alpha = 33.
-              set bulk modulus = 852.
-              set empirical coefficient = -2.
-              set mu = 88.
-        end
-          
+          set mu = 20e-6
     end  
     
+    subsection constitutive@[type=modified_one_term_ogden,instance=1,material_id=1]
+          set alpha = 2
+          set poisson ratio = 0.45
+          set empirical coefficient = -2.
+          set mu = 200e-6
+    end   
     
-    subsection constitutive@[type=maxwell_wiechert,instance=1,material_id=10]
-        subsection constitutive@[type=maxwell_element,instance = 1]
-            set deviatoric viscosity = 100.7 
-            set volumetric viscosity = 100000.       
-            subsection constitutive@[type=modified_one_term_ogden,instance=1]
-                  set alpha = -20.
-                  set bulk modulus = 972.
-                  set empirical coefficient = -2.
-                  set mu = 100.
-            end 
-        end                  
-        subsection constitutive@[type=modified_one_term_ogden,instance=1]
-              set alpha = 33.
-              set bulk modulus = 852.
-              set empirical coefficient = -2.
-              set mu = 88.
-        end
-          
-    end
 
     subsection nonlinear_solver_control
-      set absolute tolerance = 1e-10
+      set absolute tolerance = 1e-8
       set linear solver type = CG
-      set maximum number of iterations = 10
-      set relative tolerance = 1e-08
+      set maximum number of iterations = 15
+      set relative tolerance = 1e-07
     end
 
     subsection quadrature
       set quadrature points per space direction = auto
       set quadrature type = gauss
+    end
+
+    subsection contact
+      set apply contact = true  
+      set boundary file = sphereBoundary.inp
+      set penalty = 1e-5
     end
   end
 
@@ -114,7 +59,7 @@ subsection global
 
   set input directory  = /calculate/efiSim1F/build/in
   
-  set output filename = imperfectSmoothedSphereV2
+  set output filename = sphere_ogden
 
   set paraview output = true
 

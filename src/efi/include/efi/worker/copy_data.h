@@ -129,6 +129,8 @@ create_assembly_data_copier (VectorType &vec,
                              const dealii::AffineConstraints<Number>
                                 &constraints);
 
+            
+
 
 
 //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
@@ -319,6 +321,55 @@ create_assembly_data_copier (VectorType &vec,
                                 copy_data.vectors[i],
                                 copy_data.local_dof_indices[i],
                                 mat,
+                                vec);
+                    }
+                }
+                catch (dealii::ExceptionBase &exec)
+                {
+                    state = dealii::SolverControl::State::failure;
+                    efilog(Verbosity::normal) << "Copier failed."
+                                              << std::endl;
+                    efilog(Verbosity::normal) << exec.what()
+                                              << std::endl;
+                    efilog(Verbosity::normal) << "Copier failed."
+                    << std::endl;
+                    state = dealii::SolverControl::State::failure;
+                    return;
+                }
+            };
+}
+
+template <class VectorType, class MatrixType, class Number>
+std::function<void(const CopyData &)>
+create_residual_data_copier (VectorType &vec,
+                             MatrixType &mat,
+                             dealii::SolverControl::State &state,
+                             const dealii::AffineConstraints<Number>
+                                &constraints)
+{
+    return [&vec, &mat, &constraints, &state] (const CopyData &copy_data)
+            {
+                if (state == dealii::SolverControl::State::failure)
+                    return;
+
+                try
+                {
+                    
+                    for (unsigned int i = 0; i < copy_data.size(); ++i)
+                    {
+                        // Check if all numbers in the vectors
+                        // are finite. If not throw an error.
+
+                        for(auto &value : copy_data.vectors[i])
+                            {
+                                // std::cout << "VALUE:  " << value << std::endl;
+                                AssertThrow (dealii::numbers::is_finite(value),
+                                         dealii::ExcNumberNotFinite(value));
+                            }
+
+                        constraints.distribute_local_to_global(
+                                copy_data.vectors[i],
+                                copy_data.local_dof_indices[i],
                                 vec);
                     }
                 }

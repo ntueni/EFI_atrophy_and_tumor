@@ -75,19 +75,6 @@ paraview_output_enabled()
                 "paraview output");
 }
 
-bool
-GlobalParameters::
-contact_enabled()
-{
-    Assert (global_parameters().parsed,
-            dealii::ExcMessage("Parameters have not been parsed"));
-
-    return  dealii::ParameterAcceptor::prm.get_bool(
-                global_parameters().get_section_path(),
-                "contact");
-}
-
-
 void
 GlobalParameters::
 declare_parameters (dealii::ParameterHandler &prm)
@@ -121,9 +108,6 @@ declare_parameters (dealii::ParameterHandler &prm)
             Patterns::Bool(),
             "Set to true if you want to write output for paraview.");
 
-    prm.declare_entry ("contact","true",
-            Patterns::Bool(),
-            "Set to false if you don't want to apply no separation contact.");
 }
 
 

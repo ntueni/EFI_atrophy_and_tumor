@@ -103,6 +103,12 @@ namespace efi {
 
         void set_contact_boundary(dealii::types::boundary_id);
 
+        void set_penalty_parameter(const double);
+
+        double get_penalty_parameter() const;
+
+        void set_boundary_file(const std::string &);
+
         bool find_master_pnt(const dealii::Point<dim> & slave_pnt, 
             dealii::Point<dim> & master_pnt, bool);
         
@@ -113,6 +119,9 @@ namespace efi {
         static int cellCount;
 
     private:
+
+        std::string boundary_file;
+        double c;
 
         static unsigned int uncovergedPoints;
 

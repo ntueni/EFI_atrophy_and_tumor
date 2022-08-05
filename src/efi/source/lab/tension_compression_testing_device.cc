@@ -252,10 +252,7 @@ run (Sample<dim> &sample)
 {
     using namespace dealii;
 
-
-    std::cout << "Begun test with TensionCompressionTestingDevice" << std::endl;
-
-    // Set the constraints
+    // Sets zero dirichlet the constraints
     boost::signals2::connection connection_constraints =
             this->connect_constraints (sample);
     sample.reinit_constraints ();
@@ -291,6 +288,7 @@ run (Sample<dim> &sample)
     // of allowed refinements of the step width is limited to 5.
     unsigned int refinement_lvl = 0;
 
+    
     for (InputData &input : this->input_data)
     {
         times.clear();
@@ -318,6 +316,7 @@ run (Sample<dim> &sample)
             // be multiplied by the height of the sample.
             double displacement = input.data[step].second;
             efilog(Verbosity::debug) << "displacement: " << displacement;
+            // Calculate displacement normal to the surface and add these values to the 'values' vector
             values[Extractor<dim>::first_displacement_component] =
                     displacement;
             Functions::ConstantFunction<dim> boundary_function (values);
