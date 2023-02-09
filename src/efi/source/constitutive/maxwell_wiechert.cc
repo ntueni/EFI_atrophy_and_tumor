@@ -160,6 +160,30 @@ get_data_interpretation () const
             create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
     position += data_interpretation.back().n_components();
 
+    data_interpretation.push_back (
+            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_principal_strain",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("min_principal_strain",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_principal_stress",position));
+    position += data_interpretation.back().n_components();
+
+    // data_interpretation.push_back (
+    //         create_data_interpretation<Tensor<0,dim,scalar_type>>("max_shear_strain",position));
+    // position += data_interpretation.back().n_components();
+    
+    // data_interpretation.push_back (
+    //         create_data_interpretation<Tensor<0,dim,scalar_type>>("von_mises_stress",position));
+    // position += data_interpretation.back().n_components();
+
     return data_interpretation;
 }
 
@@ -176,6 +200,11 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 
     // deformation gradient
     Tensor<2,dim,double> F;
+    Tensor<2,dim> identity;
+    identity = 0.;
+    identity[0][0] = 1.0;
+    identity[1][1] = 1.0;
+    identity[2][2] = 1.0;
 
     if (additional_intput_data != nullptr)
     {
@@ -205,14 +234,41 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
             double *tau_begin = computed_quantities_ptr;
             computed_quantities_ptr += Tensor<2,dim>::n_independent_components;
 
-            AssertDimension ((Tensor<1,dim>::n_independent_components+Tensor<2,dim>::n_independent_components),
-                             computed_quantities[q].size())
+            // Lagranigan strain
+            TensorShape<2,dim,double> E (computed_quantities_ptr);
+            computed_quantities_ptr += Utilities::pow (dim,2);
 
-            for(unsigned int i = 0; i < dim; ++i)
-                u [i] = input_data.solution_values[q][Extractor<dim>::first_displacement_component+i];
+            // Lagranigan strain
+            TensorShape<0,dim,double> max_principal_strain (computed_quantities_ptr);
+            computed_quantities_ptr += Utilities::pow (dim,0);
+            TensorShape<0,dim,double> min_principal_strain (computed_quantities_ptr);
+            computed_quantities_ptr += Utilities::pow (dim,0);
+            TensorShape<0,dim,double> max_principal_stress (computed_quantities_ptr);
+            computed_quantities_ptr += Utilities::pow (dim,0);
+            // TensorShape<0,dim,double> von_mises_stress (computed_quantities_ptr);
+            // computed_quantities_ptr += Utilities::pow (dim,0);
+            
+            // AssertDimension ((Tensor<1,dim>::n_independent_components+Tensor<2,dim>::n_independent_components),
+            //                      computed_quantities[q].size())
+
+            for(unsigned int i = 0; i < dim; ++i)           
+                {
+                    u [i] = input_data.solution_values[q][Extractor<dim>::first_displacement_component+i];
+                    F [i] = input_data.solution_gradients[q][Extractor<dim>::first_displacement_component+i];
+                    F [i][i] += 1.0;
+                }
+
+            E = 0.5*(transpose(F)*F-identity);     
+
+            auto eigen_E = eigenvectors(symmetrize(0.5*(transpose(F)*F-identity)));
+            max_principal_strain = eigen_E[0].first;
+            min_principal_strain = eigen_E[2].first;
 
             for (unsigned int i = 0; i < (Tensor<2,dim>::n_independent_components); ++i)
                 tau_begin[i] = tau_fitted.value (qp_stored[q],i);
+            
+            auto eigen_S = eigenvectors(tau_stored[q]);
+            max_principal_stress = eigen_S[0].first;
         }
     }
     else

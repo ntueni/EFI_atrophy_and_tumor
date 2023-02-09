@@ -8,7 +8,9 @@
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/base/exceptions.h>
 
+
 #include <efi/grid/obstacle.h>
+#include <efi/grid/skull.h>
 #include <efi/factory/registry.h>
 #include <efi/lab/sample.h>
 
@@ -19,82 +21,33 @@ namespace efi {
 
     using namespace dealii;
 
-    template <int dim>
-    int Obstacle<dim>::cellCount = 0;
+    // template <int dim>
+    // int Obstacle<dim>::cellCount = 0;
 
     template <int dim>
-    Obstacle<dim>::Obstacle()
+    Skull<dim>::
+    Skull(const std::string &subsection_name,
+              const std::string &unprocessed_input)
+    :
+        Obstacle<dim>(subsection_name,unprocessed_input)
     {
-        efilog(Verbosity::verbose) << "Obstacle Created" << std::endl;
+        efilog(Verbosity::verbose) << "skull Created ( "
+                               << subsection_name
+                               << ")."<< std::endl;
         std::vector<double> displacements = {5,5,5};
         this->delta = displacements;
         this->searchTree = new BST<dim>(0);
     }
 
     template <int dim>
-    void Obstacle<dim>::set_delta(const std::vector<double> & displacements)
-    {
-        this->delta = displacements;
-        this->delta_set = true;
-    }
-
-    template <int dim>
-    void Obstacle<dim>::set_penalty_parameter(const double penalty)
-    {
-        this->c = penalty;
-    }
-
-
-    template <int dim>
-    double Obstacle<dim>::get_penalty_parameter() const
-    {
-        return this->c;
-    }
-
-    template <int dim>
-    void Obstacle<dim>::set_boundary_file(const std::string & filename)
-    {
-        this->boundary_file = filename;
-    }
-
-    template <int dim>
-    void Obstacle<dim>::set_contact_boundary(dealii::types::boundary_id boundary_id)
-    {
-        this->contact_boundary_id = boundary_id;
-    }
-
-    template <int dim>
-    int Obstacle<dim>::get_contact_boundary_id()
-    {
-        return this->contact_boundary_id;
-    }
-
-    template <int dim>
-    void Obstacle<dim>::print_surface(std::string fileName) const
-    {    
-        std::ofstream out(fileName);
-        GridOut       grid_out;
-        grid_out.write_vtu(this->testTriangulation, out);
-        // efilog(Verbosity::debug) << " written to " << fileName << std::endl << std::endl;  
-        // DataOut<spacedim, DoFHandler<spacedim, dim>> data_out;
-        // data_out.attach_triangulation(this->testTriangulation);
-        // data_out.build_patches();
-        // std::ofstream output(fileName);
-        // data_out.write_vtk(output);
-    }
-
-    template <int dim>
-    void Obstacle<dim>::create()
+    void Skull<dim>::
+    create()
     {   
-        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/coarseConeBoundary.inp"; 
-        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/ConeUCDBoundary.inp"; 
-        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/sphereBoundary.inp"; 
-        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/imperfectSmoothedSphereV2Boundary.inp";         
-        // std::string boundaryFile  = "/calculate/efiSim1F/build/in/Brain_model_IndentBoundary.inp"; 
+        Obstacle<dim>::create();
 
-        efilog(Verbosity::verbose) << "Contact will be applied"
-                                << std::endl;
-        efi::efilog(Verbosity::normal) << "Importing obstacle from "<< this->boundary_file << std::endl;
+        this->gap = 0.0;
+
+        efi::efilog(Verbosity::normal) << "Importing Skull from "<< this->boundary_file << std::endl;
         std::ifstream istream(this->boundary_file);
         dealii::GridIn<spacedim,dim> gridIn;
         gridIn.attach_triangulation(this->testTriangulation);
@@ -113,7 +66,55 @@ namespace efi {
     }
 
     template <int dim>
-    void Obstacle<dim>::create_capture_boxes()
+    double Skull<dim>::
+    find_master_pnt(const Point<dim> & slave_pnt, 
+        Point<dim> & master_pnt, bool print)
+    {
+        std::vector<CaptureBox<dim>> boxes;
+        this->search_tree(slave_pnt, boxes);
+        if (print)
+            efilog(Verbosity::debug) << " number of boxes found: " << boxes.size() << std::endl;
+        Assert(boxes.size(), dealii::ExcZero());
+
+        std::vector<dealii::CellId> closeCellIds;
+        this->find_absolute_closest(slave_pnt, boxes, closeCellIds);
+
+        Assert(closeCellIds.size(), dealii::ExcZero());
+
+        if (print)
+            efilog(Verbosity::debug) << closeCellIds[0] << " was found to be the absolute closest face" << std::endl;
+        
+        return this->calculate_min_gap(master_pnt, slave_pnt, closeCellIds, print);        
+    }
+
+    template <int dim>
+    void Skull<dim>::
+    set_delta(const std::vector<double> & displacements)
+    {
+        this->delta = displacements;
+        this->delta_set = true;
+    }
+
+
+    template <int dim>
+    void Skull<dim>::
+    set_boundary_file(const std::string & filename)
+    {
+        this->boundary_file = filename;
+    }
+
+    template <int dim>
+    void Skull<dim>::
+    print_surface(std::string fileName) const
+    {    
+        std::ofstream out(fileName);
+        GridOut       grid_out;
+        grid_out.write_vtu(this->testTriangulation, out);
+    }
+
+    template <int dim>
+    void Skull<dim>::
+    create_capture_boxes()
     {
         for( const auto & cell: this->testTriangulation.active_cell_iterators())
         {
@@ -145,8 +146,9 @@ namespace efi {
     }
 
     template <int dim>
-    void Obstacle<dim>::sort_capture_boxes(int comp,
-                                std::vector<CollectionBoxes<dim>> & sortedBoxes)
+    void Skull<dim>::
+    sort_capture_boxes(int comp,
+                       std::vector<CollectionBoxes<dim>> & sortedBoxes)
     {
          std::map<signed int, CollectionBoxes<dim>> collectionBoxMap;
         for (CaptureBox<dim> b : this->capture_boxes)
@@ -171,7 +173,8 @@ namespace efi {
     }
 
     template <int dim>
-    void Obstacle<dim>::boxesToBST(std::vector<CollectionBoxes<dim>> &sortedBoxes, const int comp,
+    void Skull<dim>::
+    boxesToBST(std::vector<CollectionBoxes<dim>> &sortedBoxes, const int comp,
                                    BST<dim> &bst)
     {
         const int sortedBoxSize = sortedBoxes.size();
@@ -242,33 +245,16 @@ namespace efi {
     }
 
     template <int dim>
-    void Obstacle<dim>::search_tree(const Point<dim> & query_point, std::vector<CaptureBox<dim>> & boxes)
+    void Skull<dim>::
+    search_tree(const Point<dim> & query_point, std::vector<CaptureBox<dim>> & boxes)
     {
         int *component = new int(0);
         this->searchTree->search(query_point, component, boxes);
-        // efilog(Verbosity::debug) << boxes.size() << " returned from search" << std::endl;
     }
 
     template <int dim>
-    bool Obstacle<dim>::find_master_pnt(const Point<dim> & slave_pnt, 
-        Point<dim> & master_pnt, bool print)
-    {
-        std::vector<CaptureBox<dim>> boxes;
-        this->search_tree(slave_pnt, boxes);
-        if (print)
-            efilog(Verbosity::debug) << " number of boxes found: " << boxes.size() << std::endl;
-        Assert(boxes.size(), dealii::ExcZero());
-        std::vector<dealii::CellId> closeCellIds;
-        this->find_absolute_closest(slave_pnt, boxes, closeCellIds);
-        Assert(closeCellIds.size(), dealii::ExcZero());
-        if (print)
-            efilog(Verbosity::debug) << closeCellIds[0] << " was found to be the absolute closest face" << std::endl;
-        
-        return this->calculate_min_gap(master_pnt, slave_pnt, closeCellIds, print);        
-    }
-
-    template <int dim>
-    void Obstacle<dim>::find_absolute_closest(const Point<dim> & qp, 
+    void Skull<dim>::
+    find_absolute_closest(const Point<dim> & qp, 
     std::vector<CaptureBox<dim>> & close_boxes,
     std::vector<dealii::CellId> & close_cells)
     {
@@ -297,7 +283,8 @@ namespace efi {
     }
 
     template<int dim>
-    bool Obstacle<dim>::calculate_min_gap(Point<dim> & master_pnt, 
+    double Skull<dim>::
+    calculate_min_gap(Point<dim> & master_pnt, 
         const Point<dim> & slave_pnt, 
         const std::vector<dealii::CellId> & closeFaces,
         bool print)
@@ -319,11 +306,11 @@ namespace efi {
         {
             double gap = 0.;
             const auto cell_face = this->testTriangulation.create_cell_iterator(cellId);
-            if (cell_face->material_id() == 4)
-                {
-                    cellCount++;
-                    return false;
-                }
+            // if (cell_face->material_id() == 4)
+            //     {
+            //         cellCount++;
+            //         return false;
+            //     }
             std::vector<Point<dim>> nodes_coords(4);
             for (const auto v : cell_face->vertex_indices())
             {
@@ -331,7 +318,7 @@ namespace efi {
                 if (slave_pnt.distance(nodes_coords[v]) < 1e-9)
                 {
                     master_pnt = nodes_coords[v];
-                    return true;
+                    return 0.0;
                 }
             }
 
@@ -461,9 +448,9 @@ namespace efi {
                     }
                     deltazi = 0.;
                     newZi = false;
-                    return true;
+                    return gap;
                 } else {
-                    return true;
+                    return gap;
                 }
             }
             else
@@ -495,15 +482,15 @@ namespace efi {
                 } else 
                 {
                     efilog(Verbosity::debug) <<"PROBLEM: NO convergence for any senario" << std::endl;
-                    return false;
+                    return 1.0e6;
                 }
             }
         }
-        return false;
+        return 1.0e6;
     }
 
     // template <int dim>
-    // void Obstacle<dim>::create_dof_map()
+    // void Skull<dim>::create_dof_map()
     // {
     //     // efilog(Verbosity::debug) << "Entered create dof map" << std::endl;
     //     // this->dof_handler = &sample.get_dof_handler();
@@ -549,11 +536,11 @@ namespace efi {
     // }
 
 // Instantiation
-template class Obstacle<2>;
-template class Obstacle<3>;
+template class Skull<2>;
+template class Skull<3>;
 
 // Registration
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Obstacle,2));
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Obstacle,3));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Skull,2));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(Skull,3));
 }
 

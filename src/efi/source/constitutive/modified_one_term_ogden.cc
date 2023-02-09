@@ -138,7 +138,12 @@ evaluate (ScratchData<dim> &scratch_data) const
        {
            // Compute the Kirchoff stress tensor.
            tau[q] += principal_S[a]*symmetrize(ln_dyad_ln[a][a]);
-
+        //    accumulated_stress += tau[q];
+        //    von_mises += std::sqrt(0.5*(  std::pow((tau[q][0][0] - tau[q][1][1]),2) + 
+        //                                         std::pow((tau[q][1][1] - tau[q][2][2]),2) + 
+        //                                         std::pow((tau[q][2][2] - tau[q][0][0]),2))
+        //                                 +3*(    std::pow(tau[q][0][1],2) + std::pow(tau[q][1][2],2) + std::pow(tau[q][2][0],2))
+        //                                 );
            for (unsigned int b = 0; b < dim; ++b)
            {
                A_aux += lambda_inv_dprincipal_S_dlambda[a][b] * outer_product(ln_dyad_ln[a][a],ln_dyad_ln[b][b]);
@@ -177,6 +182,23 @@ evaluate (ScratchData<dim> &scratch_data) const
                    for(unsigned int l = k; l< dim; ++l)
                        cc[q][i][j][k][l] = A_aux[i][j][k][l];
    }//q
+
+
+    // double norm_stress = (accumulated_stress/n_q_points).norm();
+    // double von_mises = von_mises/n_q_points;
+    
+    // dealii::GeneralDataStorage &tmp_history_data
+    //     = ScratchDataTools::get_tmp_history_data (scratch_data);
+    // Add the kirchoff stress to the updated_history_data
+    // tmp_history_data.template add_or_overwrite_copy ("kirchoff_stresses", tau);
+    // tmp_history_data.template add_or_overwrite_copy ("accumulated_stress", accumulated_stress);
+    // tmp_history_data.template add_or_overwrite_copy ("norm_stress", norm_stress);
+    // tmp_history_data.template add_or_overwrite_copy ("von_mises", von_mises);
+
+    // Add the quadrature points to the updated_history_data
+    // tmp_history_data.template add_or_overwrite_copy (
+    //         this->section_path_str + "quadrature_points"  + str_extension,
+    //             ScratchDataTools::get_quadrature_points(scratch_data));
 }
 
 
@@ -205,6 +227,29 @@ get_data_interpretation () const
     data_interpretation.push_back (
             create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
     position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_principal_stretch",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("med_principal_stretch",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("min_principal_stretch",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_shear",position));
+    position += data_interpretation.back().n_components();
+
+    data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("von_mises",position));
+    position += data_interpretation.back().n_components();
+    // data_interpretation.push_back (
+    //         create_data_interpretation<Tensor<0,dim,scalar_type>>("max_shear_strain",position));
+    // position += data_interpretation.back().n_components();
 
     return data_interpretation;
 }
@@ -235,6 +280,11 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     Tensor<1,dim,double> principal_stresses_vol;  // principal isochoric stresses
     Tensor<1,dim,double> principal_stresses_iso;  // principal volumetric stresses
 
+    double von_mises_tmp = 0.;
+    // TensorShape<0,dim,double> max_shear_strain (computed_quantities_ptr);
+    // computed_quantities_ptr += Utilities::pow (dim,0);
+    SymmetricTensor<2,dim> accumulated_stress;
+    accumulated_stress = 0.;
     for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
     {
         double *computed_quantities_ptr = std::addressof(computed_quantities[q][0])+position;
@@ -246,10 +296,30 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         // Piola stress
         TensorShape<2,dim,double> tau (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,2);
+        
 
         // Lagranigan strain
         TensorShape<2,dim,double> E (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,2);
+        
+
+        // Lagranigan strain
+        TensorShape<0,dim,double> max_principal_stretch (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+        
+        
+        TensorShape<0,dim,double> med_principal_stretch (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+
+        TensorShape<0,dim,double> min_principal_stretch (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+
+        TensorShape<0,dim,double> max_shear (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+
+
+        // TensorShape<0,dim,double> norm_stress (computed_quantities_ptr);
+        // computed_quantities_ptr += Utilities::pow (dim,0);
 
         for(unsigned int i = 0; i < dim; ++i)
         {
@@ -258,7 +328,13 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
             F [i][i] += 1.0;
         }
 
-        E = 0.5*(transpose(F)*F-identity);
+        E = 0.5*(transpose(F)*F-identity);     
+
+        // auto eigen_E = eigenvectors(symmetrize(0.5*(transpose(F)*F-identity)));
+        // max_principal_strain = eigen_E[0].first;
+        // med_principal_strain = eigen_E[1].first;
+        // min_principal_strain = eigen_E[2].first;
+        // max_shear_strain = max_principal_strain - min_principal_strain;
 
         auto eigen_b = eigenvectors(symmetrize(F*transpose(F)));
 
@@ -268,14 +344,48 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         // products of the eigenvectors are precomputed.
         for (unsigned int a = 0; a < dim; ++a)
             lambda[a] = std::sqrt(eigen_b[a].first);
-
+        max_principal_stretch = lambda[0];
+        med_principal_stretch = lambda[1];
+        min_principal_stretch = lambda[dim-1];
+        max_shear = (std::max({lambda[0],lambda[1],lambda[2]}) - std::min({lambda[0],lambda[1],lambda[2]}));
+        
         this->compute_principal_stresses(lambda,principal_stresses_iso,principal_stresses_vol);
 
         tau = 0;
         for (unsigned int a = 0; a < dim; ++a)
-            tau += lambda[a]*(principal_stresses_iso[a]+principal_stresses_vol[a])
+            {tau += lambda[a]*(principal_stresses_iso[a]+principal_stresses_vol[a])
                 *outer_product(eigen_b[a].second,eigen_b[a].second);
+
+            // accumulated_stress += symmetrize(lambda[a]*(principal_stresses_iso[a]+principal_stresses_vol[a])
+            //      *outer_product(eigen_b[a].second,eigen_b[a].second));
+            }
+        von_mises_tmp += std::sqrt(0.5*(  std::pow((tau[0][0] - tau[1][1]),2) + 
+                                                std::pow((tau[1][1] - tau[2][2]),2) + 
+                                                std::pow((tau[2][2] - tau[0][0]),2))
+                                        +3*(    std::pow(tau[0][1],2) + std::pow(tau[1][2],2) + std::pow(tau[2][0],2))
+                                        );
+        // accumulated_stress += tau;
+        // stress_norm = tau.norm();
     }
+    von_mises_tmp = von_mises_tmp/input_data.solution_values.size();
+    int pos = 0;
+    pos += Utilities::pow (dim,1);
+    pos += Utilities::pow (dim,2);
+    pos += Utilities::pow (dim,2);
+    pos += Utilities::pow (dim,0);
+    pos += Utilities::pow (dim,0);
+    pos += Utilities::pow (dim,0);
+    pos += Utilities::pow (dim,0);
+    for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
+    {
+        double *computed_quantities_ptr = std::addressof(computed_quantities[q][0]) + pos;
+        TensorShape<0,dim,double> von_mises (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+        von_mises = 0;
+        von_mises = von_mises_tmp;
+    }
+
+    // norm_stress = (accumulated_stress / input_data.solution_values.size()).norm();
 }
 
 

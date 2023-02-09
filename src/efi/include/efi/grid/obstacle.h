@@ -1,388 +1,160 @@
 
 
-#ifndef SRC_MYLIB_INCLUDE_EFI_LAB_OBSTACLE_H_
-#define SRC_MYLIB_INCLUDE_EFI_LAB_OBSTACLE_H_
+#ifndef SRC_MYLIB_INCLUDE_EFI_GRID_OBSTACLE_H_
+#define SRC_MYLIB_INCLUDE_EFI_GRID_OBSTACLE_H_
 
 #include <deal.II/base/point.h>
-#include <deal.II/base/bounding_box.h>
-// #include <deal.II/grid/tria.h>
-// #include <deal.II/distributed/tria_base.h>
-
+#include <deal.II/base/parameter_handler.h>
+#include <deal.II/base/parameter_acceptor.h>
+#include <deal.II/base/patterns.h>
 
 #include <efi/factory/registry.h>
 
+
+// Base class for any obstacle
+// methods that must be implemented:
+// - declare_parameters
+// - parse_parameters
+// - create
+// - find_master_point 
 namespace efi {
 
-    // Prototype for the sample class
-    template <int dim>
-    class Sample;
-
     template<int dim>
-    class CaptureBox
-    {
-        public: 
-        CaptureBox(dealii::BoundingBox<dim> box,  dealii::CellId);
-        double upperLimit(const int) const;
-        double lowerLimit(int) const;
-        dealii::CellId getCellId() const;
-
-        private:      
-        dealii::BoundingBox<dim> boxDimensions;
-        dealii::CellId cell_id;
-    };
-
-    template<int dim>
-    class BST;
-
-    template<int dim>
-    class CollectionBoxes
-    {
-        public: 
-        CollectionBoxes(int);
-        void addBox(CaptureBox<dim> &);
-        int size() const;
-        double getMaxVal() const;
-        double getMinVal() const;
-        std::vector<CaptureBox<dim>> & getCaptureBoxes();
-        BST<dim>* getNextCoordBST() const;
-        void setNextCoordBST(BST<dim>*);
-
-        private:
-        std::vector<CaptureBox<dim>> captureBoxes;
-        int componentOrderedOn;
-        double maxVal;
-        double minVal;
-        BST<dim>* nextCoordBST = nullptr;
-    };
-
-    template<int dim>
-    class Node
-    {
-        public:
-            Node(double);
-            void addBox(CollectionBoxes<dim> &);
-            void addBoxes(std::vector<CollectionBoxes<dim>> & );
-            std::vector<CollectionBoxes<dim>> getCollectionBoxes();
-            double getCuttingLine();
-            Node<dim>* getLeft() const;
-            Node<dim>* getRight() const;
-            void setLeft(Node<dim>*);
-            void setRight(Node<dim>*);
-        private:
-            double cuttingLine;
-            std::vector<CollectionBoxes<dim>> collectionBoxes;
-            Node<dim>* left = nullptr;
-            Node<dim>* right = nullptr;
-
-    };
-
-    template<int dim>
-    class BST
-    {
-        public:
-            BST(int);
-            void search(const dealii::Point<dim>&, int*, std::vector<CaptureBox<dim>> & );
-            void insert(Node<dim> &);
-            Node<dim>* getRoot();
-        private:
-            int sortedComp;
-            Node<dim>* root;
-    };
-
-    template<int dim>
-    class Obstacle
+    class Obstacle : public dealii::ParameterAcceptor 
     {
     public:
         EFI_REGISTER_AS_BASE;
 
-        Obstacle();
+        // static int cellCount;
 
-        void create();
+        Obstacle(const std::string &subsection_name,
+                      const std::string &unprocessed_input);
 
-        void set_delta(const std::vector<double>&);
+        ~Obstacle() = default;
 
         void set_contact_boundary(dealii::types::boundary_id);
+        
+        int get_contact_boundary_id() const;
 
         void set_penalty_parameter(const double);
 
         double get_penalty_parameter() const;
 
-        void set_boundary_file(const std::string &);
+        virtual
+        void parse_parameters (dealii::ParameterHandler &prm);
 
-        bool find_master_pnt(const dealii::Point<dim> & slave_pnt, 
+        virtual
+        void declare_parameters (dealii::ParameterHandler &prm);
+
+        virtual
+        void create();
+
+        virtual
+        double find_master_pnt(const dealii::Point<dim> & slave_pnt, 
             dealii::Point<dim> & master_pnt, bool);
-        
-        int get_contact_boundary_id();
 
-        void print_surface(std::string fileName) const;
+        virtual
+        void update(const double);
 
-        static int cellCount;
-
-    private:
-
-        std::string boundary_file;
+    protected:
         double c;
-
-        static unsigned int uncovergedPoints;
-
-        static constexpr unsigned int spacedim = dim - 1;
-
-        dealii::Triangulation<spacedim, dim> testTriangulation;
-
-        std::vector<double> delta;
+        double gap;
         dealii::types::boundary_id contact_boundary_id;
-        bool delta_set = false;
-        std::vector<CaptureBox<dim>> capture_boxes;
-        BST<dim> *searchTree = nullptr;
-
-        void create_capture_boxes();
-
-        void sort_capture_boxes(int component,
-                                std::vector<CollectionBoxes<dim>> & sortedBoxes);
-
-        void boxesToBST(std::vector<CollectionBoxes<dim>> &sortedBoxes, const int comp, 
-                        BST<dim> &searchTree);
-
-        void search_tree(const dealii::Point<dim> &, std::vector<CaptureBox<dim>> &);
-
-        void find_absolute_closest(const dealii::Point<dim> &, std::vector<CaptureBox<dim>> &, std::vector<dealii::CellId> &);
-
-        bool calculate_min_gap(dealii::Point<dim> &, const dealii::Point<dim> &, 
-        const std::vector<dealii::CellId> &, bool);    
-      
+        std::string section_path_str;        
     };
 
+    //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
 
-    //////////////////////////// CaptureBox inline fxs ////////////////////////////
-
-    template<int dim>
-    CaptureBox<dim>::CaptureBox(dealii::BoundingBox<dim> box, dealii::CellId cellID)
-    : boxDimensions(box),
-    cell_id(cellID)
-    {}
-
-    template<int dim>
-    double CaptureBox<dim>::upperLimit(const int comp) const
+    template <int dim>
+    inline
+    Obstacle<dim>::
+    Obstacle(const std::string &subsection_name,
+                  const std::string &)
+    :
+    dealii::ParameterAcceptor (subsection_name),
+    section_path_str (get_section_path_str(this->get_section_path()))
     {
-        return this->boxDimensions.upper_bound(comp);
+        // Do Nothing
     }
 
-    template<int dim>
-    double CaptureBox<dim>::lowerLimit(const int comp) const
+    template <int dim>
+    void
+    Obstacle<dim>::
+    declare_parameters (dealii::ParameterHandler &prm)
     {
-        return this->boxDimensions.lower_bound(comp);
+        prm.declare_entry("penalty","0",dealii::Patterns::Double());
     }
 
-    template<int dim>
-    dealii::CellId CaptureBox<dim>::getCellId() const
+    template <int dim>
+    void
+    Obstacle<dim>::
+    parse_parameters (dealii::ParameterHandler &prm)
     {
-        return this->cell_id;
+        auto penalty_parameter = prm.get_double ("penalty");
+        this->set_penalty_parameter(penalty_parameter);
     }
 
-    //////////////////////////// CollectionBoxes inline fxs ////////////////////////////
-    
-    template<int dim>
-    CollectionBoxes<dim>::CollectionBoxes(int comp)
-    : componentOrderedOn(comp)
-    , maxVal(-1.*std::numeric_limits<double>::max())
-    , minVal(std::numeric_limits<double>::max())
-    {}
-
-    template<int dim>
-    void CollectionBoxes<dim>::addBox(CaptureBox<dim> & box)
+    template <int dim>
+    inline
+    void Obstacle<dim>::
+    set_penalty_parameter(const double penalty)
     {
-        this->maxVal = box.upperLimit(this->componentOrderedOn) > this->maxVal ? 
-            box.upperLimit(this->componentOrderedOn) : this->maxVal;
-        this->minVal = box.lowerLimit(this->componentOrderedOn) < this->minVal ? 
-            box.lowerLimit(this->componentOrderedOn) : this->minVal;
-        captureBoxes.push_back(box);
+        this->c = penalty;
     }
 
-    template<int dim>
-    double CollectionBoxes<dim>::getMaxVal() const
+
+    template <int dim>
+    inline
+    double Obstacle<dim>::
+    get_penalty_parameter() const
     {
-        return this->maxVal;
+        return this->c;
     }
 
-    template<int dim>
-    double CollectionBoxes<dim>::getMinVal() const
+
+    template <int dim>
+    inline
+    void Obstacle<dim>::
+    set_contact_boundary(dealii::types::boundary_id boundary_id)
     {
-        return this->minVal;
+        this->contact_boundary_id = boundary_id;
     }
 
-    template<int dim>
-    std::vector<CaptureBox<dim>> & CollectionBoxes<dim>::getCaptureBoxes()
+    template <int dim>
+    inline
+    int Obstacle<dim>::
+    get_contact_boundary_id() const
     {
-        return this->captureBoxes;
+        return this->contact_boundary_id;
     }
 
-    template<int dim>
-    void CollectionBoxes<dim>::setNextCoordBST(BST<dim> * bst)
+    template <int dim>
+    inline
+    void Obstacle<dim>::
+    update(const double)
     {
-        this->nextCoordBST = bst;
+        // Do nothing
     }
 
-    template<int dim>
-    BST<dim>* CollectionBoxes<dim>::getNextCoordBST() const
+    template <int dim>
+    inline
+    void Obstacle<dim>::
+    create() 
     {
-        return this->nextCoordBST;
+        efilog(Verbosity::verbose) << "Contact will be applied"
+                                << std::endl;
     }
 
-    template<int dim>
-    int CollectionBoxes<dim>::size() const
+    template <int dim>
+    inline
+    double Obstacle<dim>::
+    find_master_pnt(const dealii::Point<dim> &, 
+        dealii::Point<dim> & , bool) 
     {
-        return captureBoxes.size();
+        // Do nothing
+        return 1e10;
     }
 
-    //////////////////////////// Node inline fxs ////////////////////////////
-    template<int dim>
-    Node<dim>::Node(double cuttingLine)
-    : cuttingLine(cuttingLine)
-    {
-    this->left = nullptr;
-    this->right = nullptr;
-    }
 
-    template<int dim>
-    void Node<dim>::addBox(CollectionBoxes<dim> & collectionBox)
-    {
-        collectionBoxes.push_back(collectionBox);
-    }
-
-    template<int dim>
-    void Node<dim>::addBoxes(std::vector<CollectionBoxes<dim>> & newCollectionBoxes)
-    {
-        
-        this->collectionBoxes.insert(collectionBoxes.begin(), newCollectionBoxes.begin(), newCollectionBoxes.end());
-    }
-
-    template<int dim>
-    std::vector<CollectionBoxes<dim>> Node<dim>::getCollectionBoxes()
-    {
-        return this->collectionBoxes;
-    }
-
-    template<int dim>
-    double Node<dim>::getCuttingLine()
-    {
-        return this->cuttingLine;
-    }
-
-    template<int dim>
-    Node<dim>* Node<dim>::getLeft() const
-    {
-        return this->left;
-    }
-
-    template<int dim>
-    Node<dim>* Node<dim>::getRight() const
-    {
-        return this->right;
-    }
-
-    template<int dim>
-    void Node<dim>::setLeft(Node<dim>* newNode)
-    {
-        this->left = newNode;
-    }
-
-    template<int dim>
-    void Node<dim>::setRight(Node<dim>* newNode)
-    {
-        this->right = newNode;
-    }
-    //////////////////////////// BST inline fxs ////////////////////////////
-    template<int dim>
-    BST<dim>::BST(int comp)
-    :sortedComp(comp)
-    {
-    this->root = nullptr;
-    }
-
-    template<int dim>
-    void BST<dim>::search(const dealii::Point<dim> & queryPoint, int* comp, std::vector<CaptureBox<dim>> & result)
-    {
-    Node<dim>* currentNode = this->root;
-    while( currentNode->getCuttingLine() != queryPoint(*comp))
-    {
-        double cuttingLine = currentNode->getCuttingLine();
-        // std::cout << "Current value: " << cuttingLine << std::endl;
-        std::vector<CollectionBoxes<dim>> collectionBoxes = currentNode->getCollectionBoxes();
-        for (auto boxIt = collectionBoxes.begin(); boxIt != collectionBoxes.end(); boxIt++)
-        {
-        if ( ((queryPoint(*comp) - boxIt->getMinVal()) >= -1e-6) &&
-                ((queryPoint(*comp) - boxIt->getMaxVal()) <= 1e-6) )
-                {
-                int* newComp = new int(*comp+1);
-                BST<dim>* nextBST = boxIt->getNextCoordBST();
-                if (nextBST != nullptr)
-                    nextBST->search(queryPoint, newComp, result);
-                else
-                {
-                    std::vector<CaptureBox<dim>> boxesToAdd =  boxIt->getCaptureBoxes();  
-                    result.insert(result.end(), boxesToAdd.begin(), boxesToAdd.end());
-                }
-                }    
-        }
-        if (cuttingLine - queryPoint(*comp) >= -1e-6)
-        {
-        currentNode = currentNode->getLeft();
-        if (currentNode == nullptr)
-            return;
-        }
-        else
-        {
-        currentNode = currentNode->getRight();
-        if (currentNode == nullptr)
-            return;
-        }
-    }
-
-    }
-
-    template<int dim>
-    Node<dim>* BST<dim>::getRoot()
-    {
-    return this->root;
-    }
-
-    template<int dim>
-    void BST<dim>::insert(Node<dim>& newNode)
-    {
-        // std::cout << "BST insert started"<< std::endl;
-        // std::cout << "newNode.getCuttingLine(): " << newNode.getCuttingLine() << std::endl;
-        if (this->root == nullptr)
-        {
-            this->root = &newNode;
-            return;
-        }
-        Node<dim>* current = this->root;
-        while(true)
-        {
-            Node<dim>* parent  = current;
-            //  std::cout << "current->getCuttingLine(): " << current->getCuttingLine() << std::endl;
-            if ( (newNode.getCuttingLine() - current->getCuttingLine()) < 1e-8) // Go left
-            {
-                current = current->getLeft();
-                if (current == nullptr)
-                {
-                // std::cout << "\t INSERTED left"<< std::endl;
-                    parent->setLeft(&newNode);
-                    return;
-                }
-                // std::cout << "\t SEARCHING left"<< std::endl;
-            } else
-            {
-                current = current->getRight();
-                if (current == nullptr)
-                {
-                // std::cout << "\t INSERTED right"<< std::endl;
-                    parent->setRight(&newNode);
-                    return;
-                }
-                // std::cout << "\t SEARCHING right"<< std::endl;
-            }
-        }
-    }
-} // efi namespace
+}    
 #endif

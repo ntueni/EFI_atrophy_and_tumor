@@ -114,6 +114,10 @@ public:
     const dealii::Mapping<dim>&
     get_mapping () const;
 
+        // Return a constant reference to the used map.
+    const dealii::FESystem<dim>&
+    get_fe () const;
+
     // Return a constant reference to the used geometry.
     const Geometry<dim> &
     get_geometry () const;
@@ -127,6 +131,13 @@ public:
 
     void
     set_material_ids();
+
+    void
+    set_obstacle_displacement(double);
+
+
+    void
+    get_slave_pnt(const dealii::Point<dim> &, dealii::Point<dim> &, dealii::types::global_dof_index);
 
     // // Return a constant reference to the used constitutive model.
     // const ConstitutiveBase<dim> &
@@ -218,6 +229,9 @@ public:
         boost::signals2::signal<
             void(dealii::AffineConstraints<scalar_type> &)>
         make_constraints;
+        boost::signals2::signal<
+            void(dealii::AffineConstraints<scalar_type> &, LA::MPI::Vector &)>
+        make_constraints2;
 
         // This signal is triggered when the nonlinear solver
         // has converged.
@@ -246,7 +260,7 @@ private:
     // Application of contact via 
     // updating solution and constraints object.
     void
-    apply_contact_constraints (const unsigned int, const bool);
+    apply_contact_constraints ();
 
     void 
     compute_residual();
@@ -263,7 +277,7 @@ private:
 
     // Solve the nonlinear system.
     void
-    solve_nonlinear (bool);
+    solve_nonlinear ();
 
     // Perform an allreduce on the state.
     void
@@ -277,6 +291,12 @@ private:
     //Move mesh
     void
     move_mesh(const  LA::MPI::Vector &displacement) const;
+
+    double 
+    calculate_area(dealii::types::boundary_id id) const;
+
+    void
+    compute_contact_force(dealii::IndexSet &active_set);
 
 protected:
 
@@ -445,6 +465,16 @@ get_mapping () const
     return *(this->mapping);
 }
 
+template <int dim>
+inline
+const dealii::FESystem<dim>&
+Sample<dim>::
+get_fe () const
+{
+    Assert (this->fe, dealii::ExcNotInitialized());
+    return *(this->fe);
+}
+
 
 
 template <int dim>
@@ -477,6 +507,15 @@ set_material_ids()
     for (const auto & cell : this->tria.active_cell_iterators())
         if (!std::count(material_ids.begin(), material_ids.end(),cell->material_id()))
             material_ids.push_back(cell->material_id());
+}
+
+template <int dim>
+inline
+void
+Sample<dim>::
+set_obstacle_displacement(double disp)
+{
+    this->obstacle->update(disp);
 }
 
  
@@ -609,7 +648,7 @@ connect_mesh_loop (
                     catch (ExceptionBase &exec)
                     {
                         this->state = State::failure;
-                        efilog(Verbosity::normal) << "CellWorker failed."
+                        efilog(Verbosity::normal) << "CellWorker failed sample.h line 650."
                                               << std::endl;
                     }
                 };
@@ -1106,6 +1145,7 @@ Sample<dim>::Signals::
 disconnect_all_slots ()
 {
     this->make_constraints.disconnect_all_slots ();
+    this->make_constraints2.disconnect_all_slots ();
     this->pre_nonlinear_solve.disconnect_all_slots ();
     this->post_nonlinear_solve.disconnect_all_slots ();
 }

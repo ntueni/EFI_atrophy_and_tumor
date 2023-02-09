@@ -225,6 +225,14 @@ EFI_MEASURE_BOUNDARY_DATA_WORKER (
 EFI_MEASURE_BOUNDARY_DATA_WORKER (
         TorqueX, (dealii::Tensor<1,dim,double>))
 
+// Measure the resultant force acting radially and area.
+EFI_MEASURE_BOUNDARY_DATA_WORKER (
+        RadialYZ, (dealii::Tensor<1,dim,double>))
+
+// Measure the resultant force acting perpendicularly and area.
+EFI_MEASURE_BOUNDARY_DATA_WORKER (
+        Spatula, (dealii::Tensor<1,dim,double>))
+
 
 
 //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
@@ -415,6 +423,31 @@ template <int dim>
 inline
 dealii::UpdateFlags
 MeasureBoundaryTorqueXWorker<dim>::
+get_needed_update_flags () const
+{
+    return dealii::update_JxW_values | dealii::update_normal_vectors
+            | dealii::update_gradients | dealii::update_quadrature_points
+            | dealii::update_values;
+}
+
+
+
+template <int dim>
+inline
+dealii::UpdateFlags
+MeasureBoundaryRadialYZWorker<dim>::
+get_needed_update_flags () const
+{
+    return dealii::update_JxW_values | dealii::update_normal_vectors
+            | dealii::update_gradients | dealii::update_quadrature_points
+            | dealii::update_values;
+}
+
+
+template <int dim>
+inline
+dealii::UpdateFlags
+MeasureBoundarySpatulaWorker<dim>::
 get_needed_update_flags () const
 {
     return dealii::update_JxW_values | dealii::update_normal_vectors

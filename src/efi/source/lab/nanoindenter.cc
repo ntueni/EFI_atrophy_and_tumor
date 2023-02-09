@@ -92,7 +92,8 @@ connect_constraints (Sample<dim> &sample) const
     using namespace dealii;
 
     return sample.signals.make_constraints.connect (
-    [&sample](AffineConstraints<typename Sample<dim>::scalar_type> &constraints)
+    [&sample]
+    (AffineConstraints<typename Sample<dim>::scalar_type> &constraints)
     {
         auto &dof_handler = sample.get_dof_handler ();
         auto u_mask  = Extractor<dim>::displacement_mask();

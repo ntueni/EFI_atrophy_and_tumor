@@ -185,7 +185,7 @@ declare_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
 
-    prm.declare_entry ("alpha", "-20", Patterns::Double());
+    prm.declare_entry ("alpha", "-2", Patterns::Double());
     prm.declare_entry ("mu", "0.7e3", Patterns::Double(0));
     prm.declare_entry ("poisson ratio", "0.45", Patterns::Double(0));
     prm.declare_entry ("empirical coefficient", "-2.", Patterns::Double());

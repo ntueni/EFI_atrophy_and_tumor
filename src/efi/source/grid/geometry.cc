@@ -274,10 +274,63 @@ ImportedGeometry (const std::string &subsection_name,
     this->add_parameter("inpFile", this->inpFile, "", ParameterAcceptor::prm,
             Patterns::Anything());
 
+
     efilog(Verbosity::verbose) << "New Geometry imported ("
                                << subsection_name
                                << ")." << std::endl;
 }
+
+template <int dim>
+void
+ImportedGeometry<dim>::
+declare_parameters (dealii::ParameterHandler &prm)
+{
+    using namespace dealii;
+
+    prm.declare_entry("minimums", "-10000,-10000,-10000",
+                      Patterns::List (Patterns::Double(),
+                              dim, 3, ","));
+    prm.declare_entry("maximums", "10000,10000.0,10000.0",
+                      Patterns::List (Patterns::Double(),
+                              dim, 3, ","));    
+
+    prm.declare_entry ("inhomogenous boundary id","1", Patterns::Integer ());
+    prm.declare_entry ("type","maxmin", 
+            dealii::Patterns::Selection("maxmin|location"), "options: maxmin|type");
+
+    efilog(Verbosity::verbose) << "Imported Geometry finished declaring parameters."
+                               << std::endl;
+}
+
+
+
+template <int dim>
+void
+ImportedGeometry<dim>::
+parse_parameters (dealii::ParameterHandler &param)
+{
+    using namespace dealii;
+
+    this->minimums
+        = Utilities::string_to_double (
+                Utilities::split_string_list(
+                        param.get("minimums"),','));
+    
+    this->maximums
+        = Utilities::string_to_double (
+                Utilities::split_string_list(
+                        param.get("maximums"),','));
+
+    this->inhom_bc = param.get_integer ("inhomogenous boundary id");
+
+    this->type = param.get ("type");
+
+    efilog(Verbosity::verbose) << "Imported Geometry finished parsing parameters."
+                               << std::endl;
+}
+
+
+
 
 
 template <int dim>
@@ -309,52 +362,193 @@ create_triangulation (dealii::Triangulation<dim> &tria)
         efilog(Verbosity::verbose) << "New Geometry imported." << std::endl;
 
         this->setNumberOfCells(tria.n_active_cells());
-        unsigned int num_mat_1 = 0;
+        // unsigned int num_mat_1 = 0;        
 
-        efilog(Verbosity::verbose) << "Creating dirichlet and inhomogeneous boundaries." << std::endl;
-        for (const auto &cell: tria.active_cell_iterators() )
-            for (const auto &face: cell->face_iterators() )
-                if (face->at_boundary())
-                {
-                    if ( (face->center()[0] > 58.5) &&
-                        (face->center()[1] > -15) && (face->center()[1] < -5) &&
-                        (face->center()[2] > -8) && (face->center()[2] < -2))
-                    {
-                    Point<dim> pnt1 = face->vertex(0);
-                    Point<dim> pnt2 = face->vertex(1);
-                    Point<dim> pnt3 = face->vertex(2);
-                    Tensor<1, dim> vector12 = pnt1-pnt2;
-                    Tensor<1, dim> vector23 = pnt2-pnt3;
-                    auto normal = cross_product_3d(vector12,vector23);
-                    normal = normal/normal.norm();
-                    if ( (std::fabs(normal[0]) > std::fabs(normal[1]) ) && 
-                    (std::fabs(normal[0]) > std::fabs(normal[2])) && cell->material_id() != 24)    
-                        {
-                            face->set_boundary_id(1);
-                        }
-                        else {
-                            face->set_boundary_id(3);
-                        }
-                    }
-                    // else if ( (face->center()[0] > 55.5) &&
-                    //     (face->center()[1] > -36.5) && (face->center()[1] < 14.5) &&
-                    //     (face->center()[2] > -34.5) && (face->center()[2] < 20.5))
-                    // {
-                    //     face->set_boundary_id(4);
-                    // }
-                    else if ((face->center()[0] < -8.5))
-                    {
-                        face->set_boundary_id(2);
-                    }
-                    else if (face->boundary_id() == 0)
-                    {
-                        face->set_boundary_id(3);
-                    }
-                }
+        // // Square_for_A
+        // Point<dim> vertex_1_A(42.0480, 46.6839, -45.0336);
+        // Point<dim> vertex_2_A(24.4111, 42.8497, -27.7466);
+        // Point<dim> vertex_4_A(47.5290, 27.5003, -43.6934);
+        // Point<dim> vertex_5_A(48.5790, 49.0599, -37.8436);
 
-        // this->printMeshInformation(tria);
+        // std::vector<Point<dim>> vertices1245_A = {vertex_1_A, vertex_2_A, vertex_4_A,vertex_5_A};
+
+        // std::vector<Tensor<1, dim>> vertex_vectors_A(3);
+        // std::vector< double> vector_dot_vertex_A(6);
+        
+        // this->calculate_square_vector(vertices1245_A, vertex_vectors_A, vector_dot_vertex_A);
+
+        // double u_dot_x_A;
+        // double v_dot_x_A;
+        // double w_dot_x_A;
+
+        // // Square_for_B
+        // Point<dim> vertex_1_B(41.1181, 46.3631, -46.0495);
+        // Point<dim> vertex_2_B(46.5992, 27.1795, -44.7093);
+        // Point<dim> vertex_4_B(23.7045, 42.5777, -27.8183);
+        // Point<dim> vertex_5_B(34.5871, 43.9871, -53.2395);
+
+        // std::vector<Point<dim>> vertices1245_B = {vertex_1_B, vertex_2_B, vertex_4_B,vertex_5_B};
+
+        // std::vector<Tensor<1, dim>> vertex_vectors_B(3);
+        // std::vector< double> vector_dot_vertex_B(6);
+        
+        // this->calculate_square_vector(vertices1245_B, vertex_vectors_B, vector_dot_vertex_B);
+
+        // double u_dot_x_B;
+        // double v_dot_x_B;
+        // double w_dot_x_B;
+
+        // Point<dim> maximums;
+        // Point<dim> minimums;
+
+        // for (int i=0; i<this->minimums.size(); i++)
+        // {
+        //     maximums(i) = this->maximums[i];
+        //     minimums(i) = this->minimums[i];
+        // }
+
+        // efilog(Verbosity::debug) << "Maximums: " << maximums << std::endl;
+        // efilog(Verbosity::debug) << "Minimums: " << minimums << std::endl;
+
+        // efilog(Verbosity::verbose) << "Creating dirichlet and inhomogeneous boundaries." << std::endl;
+
+        // for (const auto &cell: tria.active_cell_iterators() )
+        //     if(cell->at_boundary())
+        //         for (const auto &face: cell->face_iterators() )
+        //             if (face->at_boundary())
+        //             {
+        //                 Point<dim> x = face->center();
+        //                 if (x[0] < -4.2)
+        //                 {
+        //                     face->set_boundary_id(2);
+        //                 }   
+        //                 else if ( (this->type == "maxmin") &&
+        //                           ( (x[0] > minimums[0]) &&
+        //                             (x[1] > minimums[1]) && (x[1] < maximums[1]) &&
+        //                             (x[2] > minimums[2]) && (x[2] < maximums[2]) )) 
+        //                 {
+        //                     face->set_boundary_id(1);                           
+        //                 }
+        //                 else if ( (this->type == "location") &&
+        //                           (face->boundary_id() == this->inhom_bc) )
+        //                 {
+        //                     face->set_boundary_id(1);
+        //                 }
+        //             }
+    //     for (const auto &cell: tria.active_cell_iterators() )
+    //         if(cell->at_boundary())
+    //             for (const auto &face: cell->face_iterators() )
+    //                 if (face->at_boundary())
+    //                 {
+    //                     Point<dim> x = face->center();
+    //                     if ( (x[0] > this->minimums[0]) && (x[0] < this->maximums[0]) 
+    //                         &&   (x[1] > this->minimums[1]) && (x[1] < this->maximums[1])
+    //                         &&   (x[2] > this->minimums[2]) && (x[2] < this->maximums[2]) )
+    //                     {
+    //                         double z_minus_min = std::fabs(x[2] - this->minimums[2]);
+    //                         double z_minus_max = std::fabs(x[2] - this->maximums[2]);
+    //                         // std::cout << "face center: " << x << std::endl;
+    //                         // std::cout << "z_minus_min: " << z_minus_min << std::endl;
+    //                         // std::cout << "z_minus_max: " << z_minus_max << std::endl;
+    //                         if (z_minus_min > z_minus_max) // left face (retractor A), top
+    //                         {
+    //                                 face->set_boundary_id(501);
+    //                                 cell->set_material_id(501);                           
+    //                         }
+    //                         else if (z_minus_min < z_minus_max) // right face (retractor B), bottmom
+    //                         {
+    //                                 face->set_boundary_id(503);
+    //                                 cell->set_material_id(503);                           
+    //                         }
+    //                     }
+    //                     if ( (cell->material_id() == 16) )  // Dirichlet at brain stem
+    //                     {
+    //                         // cell->set_material_id(24);
+    //                         face->set_boundary_id(2);
+    //                     // } else if (x[2] > 3) {              // Dirichlet on right hemisphere
+    //                     //     // cell->set_material_id(24);
+    //                     //     face->set_boundary_id(2);
+    //                     }
+                    
+    //                 // else if (x[0] > 0.45)
+    //                 // {
+    //                 //     face->set_boundary_id(1);
+    //                 // }
+    // //             // else if (cellB == 0)
+    // //             // {
+    // //             //     face->set_boundary_id(3);
+    // //             //     cell->set_material_id(503);
+    // //             //     cellB++;
+
+    // //             // }
+    //                 }
+
+        this->printMeshInformation(tria);
 }
 
+
+template <int dim>
+inline
+void
+ImportedGeometry<dim>::
+calculate_square_vector(const std::vector<dealii::Point<dim>> & vertex1245, 
+                                std::vector<dealii::Tensor<1, dim>> & vertex_vectors,
+                                std::vector<double> & vector_dot_vertex)
+{
+    using namespace dealii;
+
+    Point<dim> vertex_1 = vertex1245[0];
+    Point<dim> vertex_2 = vertex1245[1];
+    Point<dim> vertex_4 = vertex1245[2];
+    Point<dim> vertex_5 = vertex1245[3];
+
+        //     6-------7
+        //    /|      /|
+        //   / |     / |
+        //  /  2----/--3
+        // 5__/____8  /
+        // | /     | /
+        // |/      |/  
+        // 1-------4
+
+    Tensor<1, dim> u = vertex_1 - vertex_2;
+    Tensor<1, dim> v = vertex_1 - vertex_4;
+    Tensor<1, dim> w = vertex_1 - vertex_5;
+
+    double u_dot_v1 = scalar_product(u,vertex_1);
+    double u_dot_v2 = scalar_product(u,vertex_2);
+    double v_dot_v1 = scalar_product(v,vertex_1);
+    double v_dot_v4 = scalar_product(v,vertex_4);
+    double w_dot_v1 = scalar_product(w,vertex_1);
+    double w_dot_v5 = scalar_product(w,vertex_5);
+
+    std::vector<double> u_dots(2);
+    u_dots[0] = u_dot_v1;
+    u_dots[1] = u_dot_v2;
+    if (u_dot_v1 > u_dot_v2)
+        std::reverse(u_dots.begin(), u_dots.end());
+    std::vector<double> v_dots(2);
+    v_dots[0] = v_dot_v1;
+    v_dots[1] = v_dot_v4;
+    if (v_dot_v1 > v_dot_v4)
+        std::reverse(v_dots.begin(), v_dots.end());
+    std::vector<double> w_dots(2);
+    w_dots[0] = w_dot_v1;
+    w_dots[1] = w_dot_v5;
+    if (w_dot_v1> w_dot_v5)
+        std::reverse(w_dots.begin(), w_dots.end()); 
+    
+    vertex_vectors[0] = u;
+    vertex_vectors[1] = v;
+    vertex_vectors[2] = w;
+    vector_dot_vertex[0] = u_dots[0];
+    vector_dot_vertex[1] = u_dots[1];
+    vector_dot_vertex[2] = v_dots[0];
+    vector_dot_vertex[3] = v_dots[1];
+    vector_dot_vertex[4] = w_dots[0];
+    vector_dot_vertex[5] = w_dots[1];
+        
+}
 
 // Instantiation
 template class Block<2>;

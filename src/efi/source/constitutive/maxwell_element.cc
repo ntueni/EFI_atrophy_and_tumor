@@ -166,7 +166,11 @@ evaluate (ScratchData<dim> &scratch_data) const
 
     ad_type tr_tau_vol = 0; // trace of the volumentric Kirchoff stress
     ad_type iso_coeff  = 1./(2.*this->eta_d);
-    ad_type vol_coeff  = 1./(double(dim)*double(dim)*this->eta_v);
+    ad_type vol_coeff = 0;
+    // if (this->eta_v > 0)
+    // {
+    //     vol_coeff  = 1./(double(dim)*double(dim)*this->eta_v);
+    // }
     // FIXME is doulbe(dim)*double(dim) correct? In the paper, it was 1/9
 
     // Loop over all quadrature points.

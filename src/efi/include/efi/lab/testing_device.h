@@ -88,6 +88,10 @@ protected:
     virtual
     boost::signals2::connection
     connect_constraints (Sample<dim> &sample) const;
+    
+    virtual
+    boost::signals2::connection
+    connect_constraints2 (Sample<dim> &sample) const;
 
     /// The mpi communicator of this object
     MPI_Comm mpi_communicator;
@@ -117,6 +121,16 @@ inline
 boost::signals2::connection
 TestingDevice<dim>::
 connect_constraints (Sample<dim> &) const
+{
+    // By default no constraints are added.
+    return boost::signals2::connection();
+}
+
+template <int dim>
+inline
+boost::signals2::connection
+TestingDevice<dim>::
+connect_constraints2 (Sample<dim> &) const
 {
     // By default no constraints are added.
     return boost::signals2::connection();

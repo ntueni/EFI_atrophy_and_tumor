@@ -75,6 +75,18 @@ paraview_output_enabled()
                 "paraview output");
 }
 
+bool
+GlobalParameters::
+create_moved_mesh()
+{
+    Assert (global_parameters().parsed,
+            dealii::ExcMessage("Parameters have not been parsed"));
+
+    return  dealii::ParameterAcceptor::prm.get_bool(
+                global_parameters().get_section_path(),
+                "move mesh");
+}
+
 void
 GlobalParameters::
 declare_parameters (dealii::ParameterHandler &prm)
@@ -107,6 +119,10 @@ declare_parameters (dealii::ParameterHandler &prm)
     prm.declare_entry ("paraview output","false",
             Patterns::Bool(),
             "Set to true if you want to write output for paraview.");
+
+    prm.declare_entry ("move mesh","false",
+            Patterns::Bool(),
+            "Set to true if you want to visualize the displacement.");
 
 }
 
@@ -145,7 +161,8 @@ parse_parameters (dealii::ParameterHandler &prm)
                         dealii::ExcMessage ("Error creating directories."));
             }
 
-            boost::filesystem::path path_to_logfile = output_path / "efilab.log";
+            std::string log_filename("efilab-" + this->output_filename + ".log");
+            boost::filesystem::path path_to_logfile = output_path / log_filename;
 
             // the ofstream must be static to guarantee that is
             // lives until the program terminates.

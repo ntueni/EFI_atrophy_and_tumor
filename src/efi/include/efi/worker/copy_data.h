@@ -282,7 +282,7 @@ create_assembly_data_copier (VectorType &vec,
                             copy_data.vectors[i],
                             copy_data.local_dof_indices[i],
                             mat,
-                            vec);
+                            vec, true);
                 }
             };
 }
@@ -321,7 +321,7 @@ create_assembly_data_copier (VectorType &vec,
                                 copy_data.vectors[i],
                                 copy_data.local_dof_indices[i],
                                 mat,
-                                vec);
+                                vec, true);
                     }
                 }
                 catch (dealii::ExceptionBase &exec)

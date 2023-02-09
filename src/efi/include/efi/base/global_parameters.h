@@ -72,6 +72,12 @@ public:
     bool
     paraview_output_enabled ();
 
+    /// Return true of false indicating whether we want to visualize the displacement
+    /// output or not.
+    static
+    bool
+    create_moved_mesh ();
+
     /// Destructor.
     ~GlobalParameters ();
 

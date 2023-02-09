@@ -50,6 +50,9 @@ declare_parameters (dealii::ParameterHandler &prm)
                     ","));
 
     prm.declare_entry ("uniaxial","false", Patterns::Bool ());
+    prm.declare_entry ("direction","1.0, 0.0, 0.0",
+                      Patterns::List (Patterns::Double(),
+                              dim, 3, ",")); 
 
     prm.declare_entry("column name displacement","displacement");
 
@@ -80,6 +83,21 @@ parse_parameters (dealii::ParameterHandler &prm)
         
 
     this->is_uniaxial = prm.get_bool("uniaxial");
+
+    this->direction = Utilities::string_to_double (
+                        Utilities::split_string_list(
+                            prm.get("direction"),','));
+    
+    double direction_magnitude =  0.;
+    for (unsigned int d = 0; d<dim; d++)
+        direction_magnitude += this->direction[d]*this->direction[d];
+    direction_magnitude = std::sqrt(direction_magnitude);
+    for (unsigned int d = 0; d<dim; d++)
+        this->direction[d] = this->direction[d]/direction_magnitude;
+    efilog(Verbosity::verbose) << "Direction of load: ";
+    for (unsigned int d = 0; d<dim; d++)
+        efilog(Verbosity::verbose) << this->direction[d] << ", ";
+    efilog(Verbosity::verbose) << std::endl;
 
     efilog(Verbosity::verbose) << "TensionCompressionTestingDecive "
                                   "finished parsing parameters."
@@ -315,16 +333,24 @@ run (Sample<dim> &sample)
             // Note that the strain data is given in percent, therefore it must
             // be multiplied by the height of the sample.
             double displacement = input.data[step].second;
-            efilog(Verbosity::debug) << "displacement: " << displacement;
+            efilog(Verbosity::normal) << "total displacement: " << displacement << std::endl;
             // Calculate displacement normal to the surface and add these values to the 'values' vector
-            values[Extractor<dim>::first_displacement_component] =
-                    displacement;
+            for (unsigned int d =0; d<dim; ++d)
+            {
+                values[Extractor<dim>::first_displacement_component+d] =
+                    displacement*this->direction[d];
+            }
+            
             Functions::ConstantFunction<dim> boundary_function (values);
 
             std::vector<bool> selector (Extractor<dim>::n_components,false);
-
+            efilog(Verbosity::normal) << "vectorized displacement: ";
             for (unsigned int d = 0; d < (this->is_uniaxial? 1 : dim); ++d)
-                selector[Extractor<dim>::first_displacement_component+d] = true;
+                {
+                    selector[Extractor<dim>::first_displacement_component+d] = true;
+                    efilog(Verbosity::normal) << values[d] << ", ";
+                }
+            efilog(Verbosity::normal) << std::endl;
 
             dealii::ComponentMask u_mask (selector);
             VectorTools::interpolate_boundary_values (
@@ -387,10 +413,15 @@ run (Sample<dim> &sample)
 
         boost::filesystem::path outdir = GlobalParameters::get_output_directory();
 
-	    boost::filesystem::path outfilename
-    		= outdir / infilepath.filename();
+        std::string output_filename = 
+        GlobalParameters::get_output_filename();
 
-	    io::CSVWriter<3> out(outfilename.string());
+	    boost::filesystem::path outfilename
+    		= outdir / infilepath.filename() ;
+
+        std::string force_output_name(outfilename.string() + "_" + output_filename);
+
+	    io::CSVWriter<3> out(force_output_name);
 	    out.write_headers("time",this->column_name_displacement,"force");
 	    out.write_rows(times,displacements,forces);
 	}

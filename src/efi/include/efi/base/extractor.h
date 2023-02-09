@@ -39,6 +39,9 @@ struct Extractor
     // Get the dealii::ComponentMask
     // of the displacement field.
     static dealii::ComponentMask displacement_mask ();
+    // Get the dealii::ComponentMask
+    // of the displacement field.
+    static dealii::ComponentMask displacement_mask_inhom (int unconstr_dim);
 
     // The number of components of the
     // considered viscoelastic problem.
@@ -77,6 +80,18 @@ Extractor<dim>::displacement_mask ()
     std::vector<bool> mask (n_components,false);
     for (unsigned int c = first_displacement_component; c < first_displacement_component+dim; ++c)
         mask[c] = true;
+    return mask;
+}
+
+template <int dim>
+inline
+dealii::ComponentMask
+Extractor<dim>::displacement_mask_inhom (int unconstr_dim)
+{
+    std::vector<bool> mask (n_components,false);
+    for (unsigned int c = 0; c < first_displacement_component+dim; ++c)
+        if (c != unconstr_dim)
+            mask[c] = true;
     return mask;
 }
 

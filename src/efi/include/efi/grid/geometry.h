@@ -257,6 +257,20 @@ public:
     virtual
     ~ImportedGeometry () = default;
 
+    /// Declare parameters to the given parameter handler.
+    /// @param[out] prm The parameter handler for which we want to declare
+    /// the parameters.
+    virtual
+    void
+    declare_parameters (dealii::ParameterHandler &param) override;
+
+    /// Parse the parameters stored int the given parameter handler.
+    /// @param[in] prm The parameter handler whose parameters we want to
+    /// parse.
+    virtual
+    void
+    parse_parameters (dealii::ParameterHandler& param) override;
+
     /// Create a triangulation of the imported geometry. 
     virtual
     void
@@ -274,13 +288,29 @@ public:
 
     // Get number of cells in imported Geometry
     unsigned int getNumberOfCells();
+    void printMeshInformation(const dealii::Triangulation<dim> &);
 
     protected:
+
+    void calculate_square_vector(const std::vector<dealii::Point<dim>> &, 
+                                std::vector<dealii::Tensor<1, dim>> &,
+                                std::vector<double> &);
 
     std::string
     inpFile;
 
-    void printMeshInformation(const dealii::Triangulation<dim> &);
+    std::vector<double>
+    minimums;
+
+    std::vector<double>
+    maximums;
+
+    dealii::types::boundary_id
+    inhom_bc;
+
+    std::string
+    type;
+
 };
 
 

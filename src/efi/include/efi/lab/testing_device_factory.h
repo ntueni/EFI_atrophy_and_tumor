@@ -23,6 +23,9 @@
 #include <efi/lab/tension_compression_testing_device.h>
 #include <efi/lab/rotational_rheometer.h>
 #include <efi/lab/translational_rheometer.h>
+#include <efi/lab/retraction_spatulars.h>
+#include <efi/lab/retraction_ellipse.h>
+#include <efi/lab/retraction_expansion_tube.h>
 
 
 namespace efi
@@ -123,6 +126,24 @@ create (const std::string& type_str,
 
         return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
     }
+    if (type_str == "retraction_spatulars")
+    {
+        using model_type = RetractionSpatulars<dim>;
+
+        return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
+    }
+    if (type_str == "retraction_ellipse")
+    {
+        using model_type = RetractionEllipse<dim>;
+
+        return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
+    }
+    if (type_str == "retraction_expansion_tube")
+    {
+        using model_type = RetractionExpansionTube<dim>;
+
+        return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
+    }
     else
         AssertThrow (false, ExcNotConstructible ());
 }
@@ -147,7 +168,8 @@ TestingDeviceFactory<dim>::
 get_names ()
 {
     return "rotational_rheometer|translational_rheometer|"
-           "tension_compression_testing_device";
+           "tension_compression_testing_device|"
+           "retraction_spatulars|retraction_ellipse|retraction_expansion_tube";
 }
 
 }//namespace efi
