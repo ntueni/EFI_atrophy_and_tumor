@@ -327,7 +327,7 @@ create_assembly_data_copier (VectorType &vec,
                 catch (dealii::ExceptionBase &exec)
                 {
                     state = dealii::SolverControl::State::failure;
-                    efilog(Verbosity::normal) << "Copier failed."
+                    efilog(Verbosity::normal) << "Copier failed 1."
                                               << std::endl;
                     efilog(Verbosity::normal) << exec.what()
                                               << std::endl;
@@ -376,7 +376,7 @@ create_residual_data_copier (VectorType &vec,
                 catch (dealii::ExceptionBase &exec)
                 {
                     state = dealii::SolverControl::State::failure;
-                    efilog(Verbosity::normal) << "Copier failed."
+                    efilog(Verbosity::normal) << "Copier failed 2."
                                               << std::endl;
                     efilog(Verbosity::normal) << exec.what()
                                               << std::endl;

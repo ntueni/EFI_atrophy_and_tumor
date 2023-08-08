@@ -284,7 +284,7 @@ fill (const DataProcessor     &data_processor,
 
     auto global_vector_name = Extractor<dim>::global_vector_name();
 
-    scratch_data.reinit (cell);
+    scratch_data.reinit(cell);
 
     // TODO the ad_helper_type should be chosen based on the type of the
     // data_processor. If it only provides a strain energy function, the

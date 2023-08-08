@@ -292,24 +292,8 @@ public:
 
     protected:
 
-    void calculate_square_vector(const std::vector<dealii::Point<dim>> &, 
-                                std::vector<dealii::Tensor<1, dim>> &,
-                                std::vector<double> &);
-
     std::string
     inpFile;
-
-    std::vector<double>
-    minimums;
-
-    std::vector<double>
-    maximums;
-
-    dealii::types::boundary_id
-    inhom_bc;
-
-    std::string
-    type;
 
 };
 

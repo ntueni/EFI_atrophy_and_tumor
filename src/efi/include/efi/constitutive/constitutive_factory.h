@@ -19,6 +19,7 @@
 #include <efi/base/exceptions.h>
 #include <efi/base/utility.h>
 #include <efi/constitutive/modified_one_term_ogden.h>
+#include <efi/constitutive/modified_one_term_ogden_atrophy.h>
 #include <efi/constitutive/maxwell_element.h>
 #include <efi/constitutive/maxwell_wiechert.h>
 #include <efi/constitutive/neo_hooke.h>
@@ -130,6 +131,12 @@ create (const std::string& type_str,
 
         return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
     }
+    else if (type_str == "modified_one_term_ogden_atrophy")
+    {
+        using model_type = ModifiedOneTermOgdenAtrophy<dim>;
+
+        return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
+    }
     else if (type_str == "maxwell_element")
     {
         using model_type = MaxwellElement<dim>;
@@ -166,7 +173,7 @@ ConstitutiveFactory<dim>::
 get_names ()
 {
     return "neo_hooke|neo_hooke_alternative|ogden|modified_one_term_ogden|maxwell_element|"
-           "maxwell_wiechert";
+           "maxwell_wiechert|modified_one_term_ogden_atrophy";
 }
 
 }//namespace efi

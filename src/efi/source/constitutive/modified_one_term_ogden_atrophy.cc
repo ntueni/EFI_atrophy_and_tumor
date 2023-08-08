@@ -23,7 +23,7 @@
 
 // efi headers
 #include <efi/base/extractor.h>
-#include <efi/constitutive/modified_one_term_ogden.h>
+#include <efi/constitutive/modified_one_term_ogden_atrophy.h>
 #include <efi/lac/tensor_shape.h>
 #include <efi/factory/registry.h>
 
@@ -35,7 +35,7 @@ namespace efi {
 //ResidualLinearization version
 template<int dim>
 void
-ModifiedOneTermOgden<dim>::
+ModifiedOneTermOgdenAtrophy<dim>::
 evaluate (ScratchData<dim> &scratch_data) const
 {
    using namespace dealii;
@@ -53,8 +53,16 @@ evaluate (ScratchData<dim> &scratch_data) const
    auto &tau = ScratchDataTools::get_or_add_kirchoff_stresses        (scratch_data,global_vector_name,ad_type(0));
    auto &cc  = ScratchDataTools::get_or_add_kirchoff_stress_tangents (scratch_data,global_vector_name,ad_type(0));
 
+
    // Get the displacement gradients.
    auto &Grad_u = ScratchDataTools::get_gradients (scratch_data,global_vector_name,Extractor<dim>::displacement(),ad_type(0));
+
+    // Get history data
+    auto& history_data = ScratchDataTools::get_history_data(scratch_data);
+    auto& tmp_history_data = ScratchDataTools::get_tmp_history_data(scratch_data);
+
+    // Get current time step
+    double dt = ScratchDataTools::get_time_step_size(scratch_data);
 
    // Array of eigenvalues and -vectors.
    std::array<std::pair<ad_type,Tensor<1,dim,ad_type>>,dim> eigen_b;
@@ -75,12 +83,23 @@ evaluate (ScratchData<dim> &scratch_data) const
    // Since the principal stresses are derived from
    // a potential their tangent is symmetric.
    // 1/lambda[b]*(d(principal_S[a])/d(lambda[b]))
-   SymmetricTensor<2,dim,ad_type> lambda_inv_dprincipal_S_dlambda;
+    SymmetricTensor<2,dim,ad_type> lambda_inv_dprincipal_S_dlambda;
+
+    // Calculate atrophy data
+    double degree_atrophy = history_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
+    double degree_atrophy_tmp = tmp_history_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
+    degree_atrophy = (degree_atrophy - this->atrophy_rate*dt);
+    // Store new atrophy rate to be used at next time 
+    tmp_history_data.add_or_overwrite_copy("degree_atrophy", degree_atrophy);
+
+    Tensor<2,dim,ad_type> F_total;
 
    // Loop over the quadrature points.
    for (unsigned int q = 0; q < n_q_points; ++q)
    {
-       F [q] = StandardTensors<dim>::I + Grad_u[q];
+        F_total = 0.;
+        F_total = StandardTensors<dim>::I + Grad_u[q];
+        F[q] = F_total/std::cbrt(degree_atrophy);
 
        // Compute the eigenvalues and -vectors of b = F*F^T.
        // By default ql_implicit_shifts algorithm is used.
@@ -205,7 +224,7 @@ evaluate (ScratchData<dim> &scratch_data) const
 
 template<int dim>
 std::vector<DataInterpretation>
-ModifiedOneTermOgden<dim>::
+ModifiedOneTermOgdenAtrophy<dim>::
 get_data_interpretation () const
 {
     using namespace dealii;
@@ -258,7 +277,7 @@ get_data_interpretation () const
 
 template<int dim>
 void
-ModifiedOneTermOgden<dim>::
+ModifiedOneTermOgdenAtrophy<dim>::
 evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input_data,
                        std::vector<dealii::Vector<double>> &computed_quantities,
                        const dealii::GeneralDataStorage *) const
@@ -269,6 +288,7 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 
     // deformation gradient
     Tensor<2,dim,double> F;
+
     Tensor<2,dim> identity;
     identity = 0.;
     for (int d = 0; d<dim; d++){
@@ -393,7 +413,7 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 template <int dim>
 inline
 void
-ModifiedOneTermOgden<dim>::
+ModifiedOneTermOgdenAtrophy<dim>::
 compute_principal_stresses (const std::array<double,dim> &lambda,
                             dealii::Tensor<1,dim,double> &principal_stress_iso,
                             dealii::Tensor<1,dim,double> &principal_stress_vol) const
@@ -443,7 +463,7 @@ compute_principal_stresses (const std::array<double,dim> &lambda,
 template <int dim>
 inline
 void
-ModifiedOneTermOgden<dim>::
+ModifiedOneTermOgdenAtrophy<dim>::
 compute_principal_stress_tangents (const std::array<double,dim> &lambda,
                                    dealii::SymmetricTensor<2,dim,double> &principal_stress_tangent_iso,
                                    dealii::SymmetricTensor<2,dim,double> &principal_stress_tangent_vol) const
@@ -536,12 +556,12 @@ compute_principal_stress_tangents (const std::array<double,dim> &lambda,
 
 
 // Instantiations
-template class ModifiedOneTermOgden<2>;
-template class ModifiedOneTermOgden<3>;
+template class ModifiedOneTermOgdenAtrophy<2>;
+template class ModifiedOneTermOgdenAtrophy<3>;
 
 // Registration
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgden,2));
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgden,3));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgdenAtrophy,2));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgdenAtrophy,3));
 
 }// namespace efi
 

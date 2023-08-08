@@ -87,6 +87,7 @@ public:
     bool
     run (const std::map<dealii::types::global_dof_index,double> &prescribed,
          const double time_step_size);
+    // value.
 
     // Initialize the members.
     // TODO Integrate set_output_directory in initialize.
@@ -122,22 +123,11 @@ public:
     const Geometry<dim> &
     get_geometry () const;
 
-    // Return a constant reference to the contact obstacle.
-    const Obstacle<dim> &
-    get_obstacle () const;
-
     const std::vector<dealii::types::material_id>
     get_material_ids() const;
 
     void
     set_material_ids();
-
-    void
-    set_obstacle_displacement(double);
-
-
-    void
-    get_slave_pnt(const dealii::Point<dim> &, dealii::Point<dim> &, dealii::types::global_dof_index);
 
     // // Return a constant reference to the used constitutive model.
     // const ConstitutiveBase<dim> &
@@ -229,9 +219,6 @@ public:
         boost::signals2::signal<
             void(dealii::AffineConstraints<scalar_type> &)>
         make_constraints;
-        boost::signals2::signal<
-            void(dealii::AffineConstraints<scalar_type> &, LA::MPI::Vector &)>
-        make_constraints2;
 
         // This signal is triggered when the nonlinear solver
         // has converged.
@@ -256,14 +243,6 @@ private:
     // the system matrix.
     void
     reinit_sparsity ();
-
-    // Application of contact via 
-    // updating solution and constraints object.
-    void
-    apply_contact_constraints ();
-
-    void 
-    compute_residual();
 
     // Assemble the linear system
     // characterized by system_matrix
@@ -292,12 +271,6 @@ private:
     void
     move_mesh(const  LA::MPI::Vector &displacement) const;
 
-    double 
-    calculate_area(dealii::types::boundary_id id) const;
-
-    void
-    compute_contact_force(dealii::IndexSet &active_set);
-
 protected:
 
     // Instantiate the protected members based
@@ -320,9 +293,6 @@ protected:
     // geometry
     std::unique_ptr<Geometry<dim>> geometry;
 
-    // contact object
-    std::unique_ptr<Obstacle<dim>> obstacle;
-
 private:
 
     // output times and names required
@@ -338,13 +308,10 @@ private:
     // dof handler and constraints
     dealii::DoFHandler<dim>                dof_handler;
     dealii::AffineConstraints<scalar_type> constraints;
-    dealii::AffineConstraints<scalar_type> contact_constraints;
-    dealii::AffineConstraints<scalar_type> empty_constraints;
 
     // index sets
     dealii::IndexSet locally_owned_dofs;
     dealii::IndexSet locally_relevant_dofs;
-    dealii::IndexSet active_set;
 
     // local objects
     std::unique_ptr<dealii::FESystem<dim>>        fe;
@@ -358,8 +325,6 @@ private:
     LA::MPI::SparseMatrix system_matrix;
     LA::MPI::Vector       system_vector;
     LA::MPI::Vector       system_increment;
-    LA::MPI::Vector       diag_mass_matrix_vector;
-    LA::MPI::Vector       uncondensed_rhs;
     LA::MPI::Vector       locally_owned_solution;
     LA::MPI::Vector       locally_relevant_solution;
 
@@ -369,6 +334,9 @@ private:
     // time step size
     scalar_type time_step_size;
     scalar_type elapsed_time;
+
+
+    scalar_type load;
 
     // Sample of a scratch data object. It contains all
     // data structures and temporary objects required
@@ -413,8 +381,6 @@ private:
     std::unique_ptr<dealii::TimerOutput> timer;
 
     std::vector<dealii::types::material_id> material_ids;
-
-    bool apply_contact;
 
 };
 
@@ -488,16 +454,6 @@ get_geometry () const
 }
 
 
-// template <int dim>
-// inline
-// const Obstacle<dim> &
-// Sample<dim>::
-// get_obstacle () const;
-// {
-
-// }
-
-
 template <int dim>
 inline
 void
@@ -508,16 +464,6 @@ set_material_ids()
         if (!std::count(material_ids.begin(), material_ids.end(),cell->material_id()))
             material_ids.push_back(cell->material_id());
 }
-
-template <int dim>
-inline
-void
-Sample<dim>::
-set_obstacle_displacement(double disp)
-{
-    this->obstacle->update(disp);
-}
-
  
 template <int dim>
 inline
@@ -537,7 +483,6 @@ get_constitutive_model (int material_id) const
     // Assert (this->constitutive_model, dealii::ExcNotInitialized());
     return *(this->constitutive_model_map.at(material_id));
 }
-
 
 
 template <int dim>
@@ -715,7 +660,7 @@ connect_mesh_loop (
                 // Set the time step size.
                 ScratchDataTools::get_or_add_time_step_size(
                         external_sample_scratch_data) = this->time_step_size;
-
+                
                 mesh_loop (
                         this->dof_handler.begin_active(),
                         this->dof_handler.end(),
@@ -836,6 +781,7 @@ connect_boundary_loop (
                 ScratchDataTools::get_or_add_time_step_size(
                         external_sample_scratch_data) = this->time_step_size;
 
+                
                 // Now run the mesh loop with the specified worker classes.
                 mesh_loop (
                         this->dof_handler.begin_active(),
@@ -1145,7 +1091,6 @@ Sample<dim>::Signals::
 disconnect_all_slots ()
 {
     this->make_constraints.disconnect_all_slots ();
-    this->make_constraints2.disconnect_all_slots ();
     this->pre_nonlinear_solve.disconnect_all_slots ();
     this->post_nonlinear_solve.disconnect_all_slots ();
 }

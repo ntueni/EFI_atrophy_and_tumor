@@ -135,9 +135,9 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     Tensor<2,dim> F;
     Tensor<2,dim> identity;
     identity = 0.;
-    identity[0][0] = 1.0;
-    identity[1][1] = 1.0;
-    identity[2][2] = 1.0;
+    for (int d = 0; d<dim; d++){
+        identity[d][d] = 1.0;
+    }
 
     unsigned int position = 0;
 
