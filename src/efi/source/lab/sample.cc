@@ -907,6 +907,29 @@ write_output (const unsigned int step,
     out.add_data_vector(distributed_material_id,"material_ids");
          
 
+    // add concentration
+    Vector<double> distributed_conc(tria.n_active_cells());
+    distributed_conc = 0.;
+    for( const auto cell : tria.active_cell_iterators())
+    {
+        auto cell_data  = this->cell_data_history_storage->get_data(cell);
+        double c = cell_data.template get_object_with_name<double>("concentration");
+        distributed_conc[cell->active_cell_index()] = c;
+    } 
+
+    out.add_data_vector(distributed_conc,"concentration");
+
+    // add degg atrophy
+    Vector<double> deg_atrophy(tria.n_active_cells());
+    deg_atrophy = 0.;
+    for( const auto cell : tria.active_cell_iterators())
+    {
+        auto cell_data  = this->cell_data_history_storage->get_data(cell);
+        double theta = cell_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
+        deg_atrophy[cell->active_cell_index()] = theta;
+    } 
+
+    out.add_data_vector(deg_atrophy,"degree_atrophy");
     // get the subdomain IDs
     types::subdomain_id locally_owned_subdomain =
             this->tria.locally_owned_subdomain ();

@@ -286,6 +286,8 @@ fill (const DataProcessor     &data_processor,
 
     scratch_data.reinit(cell);
 
+    dealii::Point<dim> center = cell.center();
+
     // TODO the ad_helper_type should be chosen based on the type of the
     // data_processor. If it only provides a strain energy function, the
     // energy_linearisation must be used if it provides stresses as well

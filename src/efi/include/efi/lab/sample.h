@@ -123,6 +123,9 @@ public:
     const Geometry<dim> &
     get_geometry () const;
 
+    GeneralCellDataStorage &
+    get_cell_data_history_storage();
+
     const std::vector<dealii::types::material_id>
     get_material_ids() const;
 
@@ -441,8 +444,6 @@ get_fe () const
     return *(this->fe);
 }
 
-
-
 template <int dim>
 inline
 const Geometry<dim>&
@@ -453,6 +454,16 @@ get_geometry () const
     return *(this->geometry);
 }
 
+
+template <int dim>
+inline
+GeneralCellDataStorage&
+Sample<dim>::
+get_cell_data_history_storage()
+{
+    Assert (this->cell_data_history_storage, dealii::ExcNotInitialized());
+    return *(this->cell_data_history_storage);
+}
 
 template <int dim>
 inline

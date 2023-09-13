@@ -220,13 +220,13 @@ get_data_interpretation () const
             create_data_interpretation<Tensor<1,dim,scalar_type>>("displacement",position));
     position += data_interpretation.back().n_components();
 
-    data_interpretation.push_back (
-            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
-    position += data_interpretation.back().n_components();
+    // data_interpretation.push_back (
+    //         create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
+    // position += data_interpretation.back().n_components();
 
-    data_interpretation.push_back (
-            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
-    position += data_interpretation.back().n_components();
+    // data_interpretation.push_back (
+    //         create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
+    // position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
             create_data_interpretation<Tensor<0,dim,scalar_type>>("max_principal_stretch",position));
@@ -293,14 +293,14 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         TensorShape<1,dim,double> u (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,1);
 
-        // Piola stress
-        TensorShape<2,dim,double> tau (computed_quantities_ptr);
-        computed_quantities_ptr += Utilities::pow (dim,2);
+        // // Piola stress
+        Tensor<2,dim,double> tau ;
+        // computed_quantities_ptr += Utilities::pow (dim,2);
         
 
-        // Lagranigan strain
-        TensorShape<2,dim,double> E (computed_quantities_ptr);
-        computed_quantities_ptr += Utilities::pow (dim,2);
+        // // Lagranigan strain
+        Tensor<2,dim,double> E ;
+        // computed_quantities_ptr += Utilities::pow (dim,2);
         
 
         // Lagranigan strain
@@ -370,8 +370,8 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     von_mises_tmp = von_mises_tmp/input_data.solution_values.size();
     int pos = 0;
     pos += Utilities::pow (dim,1);
-    pos += Utilities::pow (dim,2);
-    pos += Utilities::pow (dim,2);
+    // pos += Utilities::pow (dim,2);
+    // pos += Utilities::pow (dim,2);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);

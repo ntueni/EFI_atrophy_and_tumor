@@ -50,6 +50,12 @@ declare_parameters (dealii::ParameterHandler &prm)
 
     prm.declare_entry("column name atrophy","atrophy");
 
+    using P = dealii::Patterns::Tools::Convert<Tensor<1,dim>>;        
+    Point<dim> point;    
+    prm.declare_entry("center",P::to_string(point),*P::to_pattern(),"Documentation");
+
+    prm.declare_entry("max radius","1",Patterns::Double(0));
+
     efilog(Verbosity::verbose) << "Atrophy finished declaring "
                                   "parameters."
                                << std::endl;
@@ -69,6 +75,11 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     std::string column_name_angle = prm.get("column name atrophy");
 
+    this->concentration_radius = prm.get_double("max radius");
+
+    using P = dealii::Patterns::Tools::Convert<Tensor<1,dim>>;
+    this->concentration_center = P::to_value(prm.get("center"));
+
     this->input_data.clear();
 
     boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
@@ -77,6 +88,13 @@ parse_parameters (dealii::ParameterHandler &prm)
         boost::filesystem::path full_path = input_directory / file;
         this->read_test_protocol (full_path.string(),column_name_angle);
     }
+
+    efilog(Verbosity::normal) << "Atrophy center "
+                               << this->concentration_center
+                               << std::endl; 
+    efilog(Verbosity::normal) << "Atrophy radius "
+                               << this->concentration_radius
+                               << std::endl; 
     efilog(Verbosity::verbose) << "Atrophy finished parsing "
                                   "parameters."
                                << std::endl;
@@ -179,6 +197,30 @@ run (Sample<dim> &sample)
     std::vector<double> torques;
     std::vector<double> angles;
 
+    auto& dof_handler = sample.get_dof_handler();
+    auto& cell_data_history = sample.get_cell_data_history_storage();
+    
+    for (const auto &cell : dof_handler.active_cell_iterators()){
+        dealii::Point<dim> center = cell->center();
+        double radius = center.distance(this->concentration_center);
+        double concentration = 0.;
+        if (radius <= this->concentration_radius){
+            concentration = 1 - (radius/this->concentration_radius);
+        }
+        double heaviSide =1.0/(1. + std::exp(-1*100*(concentration-0.5)));
+        concentration = concentration *heaviSide;
+        dealii::GeneralDataStorage& cell_data = cell_data_history.get_data(cell);
+        cell_data.template add_or_overwrite_copy("concentration", concentration);
+    }
+    efilog(Verbosity::debug) << "CONCENTRATION SET" << std::endl;
+
+    // for (const auto &cell : dof_handler.active_cell_iterators()){
+    //     auto cell_data = cell_data_history.get_data(cell);
+    //     double c = cell_data.template get_object_with_name<double>("concentration");
+    //     if (c > 0.0){
+    //         efilog(Verbosity::debug) << "CONCENTRATION: " << c << std::endl;
+    //     }
+    // }
     // When the prescribed displacement per step is too large, the algorithm
     // reduces the step width and tries to apply the the boundary conditions
     // in smaller steps. However, sometimes this wont help, therefore the number
@@ -208,7 +250,9 @@ run (Sample<dim> &sample)
 
             double load = input.data[step].second;
 
-            if (sample.run (boundary_values, dt))
+            efi::efilog(Verbosity::normal) << "Total time: " << time << std::endl;
+
+            if (sample.run(boundary_values, dt))
             {
                 // When the refinement level is zero, then we have reached a
                 // point in time for which experimental data is available.

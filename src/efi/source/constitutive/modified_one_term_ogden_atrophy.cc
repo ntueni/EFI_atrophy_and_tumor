@@ -85,14 +85,23 @@ evaluate (ScratchData<dim> &scratch_data) const
    // 1/lambda[b]*(d(principal_S[a])/d(lambda[b]))
     SymmetricTensor<2,dim,ad_type> lambda_inv_dprincipal_S_dlambda;
 
+    // Get cell concentration data
+    double c = history_data.template get_object_with_name<double>("concentration");
+
+    // efilog(Verbosity::debug) << "CONCENTRATION: " <<  concentration << std::endl;
     // Calculate atrophy data
     double degree_atrophy = history_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
-    double degree_atrophy_tmp = tmp_history_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
-    degree_atrophy = (degree_atrophy - this->atrophy_rate*dt);
+    // double degree_atrophy_tmp = tmp_history_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
+    // double heaviSide =1.0/(1. + std::exp(-1*100*(c-0.5)));
+
+    degree_atrophy = degree_atrophy - ((1 + (this->G_c/this->G_h) * c) * this->G_h*dt);
+
     // Store new atrophy rate to be used at next time 
     tmp_history_data.add_or_overwrite_copy("degree_atrophy", degree_atrophy);
 
     Tensor<2,dim,ad_type> F_total;
+    Tensor<2,dim,ad_type> F_a;
+    // F_a = StandardTensors<dim>::I*std::cbrt(degree_atrophy);
 
    // Loop over the quadrature points.
    for (unsigned int q = 0; q < n_q_points; ++q)
@@ -239,13 +248,13 @@ get_data_interpretation () const
             create_data_interpretation<Tensor<1,dim,scalar_type>>("displacement",position));
     position += data_interpretation.back().n_components();
 
-    data_interpretation.push_back (
-            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
-    position += data_interpretation.back().n_components();
+    // data_interpretation.push_back (
+    //         create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("kirchoff_stress",position));
+    // position += data_interpretation.back().n_components();
 
-    data_interpretation.push_back (
-            create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
-    position += data_interpretation.back().n_components();
+    // data_interpretation.push_back (
+    //         create_data_interpretation<SymmetricTensor<2,dim,scalar_type>>("lagrangian_strain",position));
+    // position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
             create_data_interpretation<Tensor<0,dim,scalar_type>>("max_principal_stretch",position));
@@ -313,14 +322,14 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         TensorShape<1,dim,double> u (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,1);
 
-        // Piola stress
-        TensorShape<2,dim,double> tau (computed_quantities_ptr);
-        computed_quantities_ptr += Utilities::pow (dim,2);
+        // // Piola stress
+        Tensor<2,dim,double> tau ;
+        // computed_quantities_ptr += Utilities::pow (dim,2);
         
 
-        // Lagranigan strain
-        TensorShape<2,dim,double> E (computed_quantities_ptr);
-        computed_quantities_ptr += Utilities::pow (dim,2);
+        // // Lagranigan strain
+        Tensor<2,dim,double> E ;
+        // computed_quantities_ptr += Utilities::pow (dim,2);
         
 
         // Lagranigan strain
@@ -390,8 +399,8 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     von_mises_tmp = von_mises_tmp/input_data.solution_values.size();
     int pos = 0;
     pos += Utilities::pow (dim,1);
-    pos += Utilities::pow (dim,2);
-    pos += Utilities::pow (dim,2);
+    // pos += Utilities::pow (dim,2);
+    // pos += Utilities::pow (dim,2);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);

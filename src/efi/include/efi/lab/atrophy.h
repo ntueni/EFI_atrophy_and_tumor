@@ -96,6 +96,9 @@ private:
 
     // Input data
     std::vector<InputData> input_data;
+
+    double concentration_radius;
+    dealii::Point<dim> concentration_center;
 };
 
 
@@ -109,7 +112,8 @@ Atrophy<dim>::
 Atrophy (const std::string &subsection_name,
            const std::string &unprocessed_input,
            MPI_Comm mpi_communicator)
-: TestingDevice<dim> (subsection_name, unprocessed_input,mpi_communicator)
+: TestingDevice<dim> (subsection_name, unprocessed_input,mpi_communicator),
+concentration_radius(1)
 {
     efilog(Verbosity::verbose) << "New Atrophy created ("
                               << subsection_name
@@ -143,7 +147,7 @@ void
 Atrophy<dim>::GetConstrainedBoundaryIDs::
 visit (const ImportedGeometry<dim> &)
 {
-    this->homogeneous = 2;
+    this->homogeneous = 200;
     this->inhomogeneous = 1;
 }
 

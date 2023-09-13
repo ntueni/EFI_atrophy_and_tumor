@@ -152,8 +152,11 @@ private:
     /// Empirical coefficient.
     scalar_type beta;
 
-    /// Relative rate of atrophy.
-    scalar_type atrophy_rate;
+    /// Normal rate of atrophy.
+    scalar_type G_h;
+
+    /// Enhanced rate of atrophy due to concentration.
+    scalar_type G_c;
 };
 
 
@@ -171,7 +174,8 @@ ModifiedOneTermOgdenAtrophy(const std::string &subsection_name,
     ConstitutiveBase<dim>(subsection_name,unprocessed_input),
     kappa(1.),
     beta(1.),
-    atrophy_rate(0.)
+    G_h(0.),
+    G_c(0.)
 {
     efilog(Verbosity::verbose) << "New ModifiedOneTermOgden constitutive "
                                   "model created  with ATROPHY ("
@@ -193,7 +197,8 @@ declare_parameters (dealii::ParameterHandler &prm)
     prm.declare_entry ("mu", "0.7e3", Patterns::Double(0));
     prm.declare_entry ("poisson ratio", "0.45", Patterns::Double(0));
     prm.declare_entry ("empirical coefficient", "-2.", Patterns::Double());
-    prm.declare_entry ("atrophy rate", "0.0", Patterns::Double(0));
+    prm.declare_entry ("normal atrophy rate", "0.0", Patterns::Double(0));
+    prm.declare_entry ("enhanced atrophy rate", "0.0", Patterns::Double(0));
 
     efilog(Verbosity::verbose) << "ModifiedOneTermOgdenAtrophy constitutive model "
                                   "finished declaring parameters."
@@ -215,13 +220,17 @@ parse_parameters (dealii::ParameterHandler &prm)
     double nu = prm.get_double ("poisson ratio");
     this->kappa = 2*this->mu*(1.0+nu)/3.0/(1.0-2.0*nu);
     this->beta  = prm.get_double ("empirical coefficient");
-    this->atrophy_rate = prm.get_double ("atrophy rate");
+    this->G_h = prm.get_double ("normal atrophy rate");
+    this->G_c = prm.get_double ("enhanced atrophy rate");
 
     efilog(Verbosity::verbose) << "kappa value: "
                                << kappa
                                << std::endl;
-    efilog(Verbosity::verbose) << "relative atrophy: "
-                               << this->atrophy_rate
+    efilog(Verbosity::verbose) << "normal atrophy rate: "
+                               << this->G_h
+                               << std::endl;
+    efilog(Verbosity::verbose) << "enhanced atrophy rate: "
+                               << this->G_c
                                << std::endl;
 
     efilog(Verbosity::verbose) << "ModifiedOneTermOgdenAtrophy constitutive model "
