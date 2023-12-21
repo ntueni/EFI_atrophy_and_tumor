@@ -269,11 +269,11 @@ get_data_interpretation () const
     position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
-            create_data_interpretation<Tensor<0,dim,scalar_type>>("hyrdostatic_stress",position));
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_shear",position));
     position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
-            create_data_interpretation<Tensor<0,dim,scalar_type>>("max_shear",position));
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("hyrdostatic_stress",position));
     position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
@@ -314,6 +314,7 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     Tensor<1,dim,double> principal_stresses_iso;  // principal volumetric stresses
 
     double von_mises_tmp = 0.;
+    double hydro_stress_tmp = 0.;
     // TensorShape<0,dim,double> max_shear_strain (computed_quantities_ptr);
     // computed_quantities_ptr += Utilities::pow (dim,0);
     SymmetricTensor<2,dim> accumulated_stress;
@@ -346,14 +347,14 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
 
         TensorShape<0,dim,double> min_principal_stretch (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,0);
-        
-
-        // Hydrostatic stress
-        TensorShape<0,dim,double> hydro_stress(computed_quantities_ptr);
-        computed_quantities_ptr += Utilities::pow (dim,0);
 
         TensorShape<0,dim,double> max_shear (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,0);
+        
+
+        // // Hydrostatic stress
+        // TensorShape<0,dim,double> hydro_stress(computed_quantities_ptr);
+        // computed_quantities_ptr += Utilities::pow (dim,0);
 
 
         // TensorShape<0,dim,double> norm_stress (computed_quantities_ptr);
@@ -404,10 +405,11 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
                                         );
         // accumulated_stress += tau;
         // stress_norm = tau.norm();
-        hydro_stress = (tau[0][0] + tau[1][1] + tau[2][2])/3.;
+        hydro_stress_tmp += (tau[0][0] + tau[1][1] + tau[2][2])/3.;
     }
 
     von_mises_tmp = von_mises_tmp/input_data.solution_values.size();
+    hydro_stress_tmp = hydro_stress_tmp/input_data.solution_values.size();\
     int pos = 0;
     pos += Utilities::pow (dim,1);
     // pos += Utilities::pow (dim,2);
@@ -416,10 +418,17 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
-    pos += Utilities::pow (dim,0);
     for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
     {
         double *computed_quantities_ptr = std::addressof(computed_quantities[q][0]) + pos;
+        TensorShape<0,dim,double> hydro_stress (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+        hydro_stress = 0;
+        hydro_stress = hydro_stress_tmp;
+    }
+    for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
+    {
+        double *computed_quantities_ptr = std::addressof(computed_quantities[q][0]) + pos+1;
         TensorShape<0,dim,double> von_mises (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,0);
         von_mises = 0;
