@@ -1,0 +1,39 @@
+EFI- Constitutive_model Documentation
+
+1. neo_hooke
+    Parameters to set: 
+        - young's modulus (default = 2.1e5);
+        - poisson ratio (default = 0.3);
+        
+2. neo_hooke_alternative
+    Parameters to set: 
+        - young's modulus (default = 2.1e5);
+        - poisson ratio (default = 0.3);
+        
+3. ogden
+    Parameters to set: 
+        - alpha (default = -20)
+        - bulk modulus (default = 0.7e3)
+        - empirical coefficient (default = 3.e3)
+        - mu = (default = -2)
+        
+4. modified_one_term_ogden
+    Parameters to set: 
+        - alpha (default = -20)
+        - bulk modulus (default = 0.7e3)
+        - empirical coefficient (default = -2)
+        - mu = (default = 3.e3)
+
+5. maxwell_element
+    Parameters to set: 
+        - deviatoric viscosity (default = 0)
+        - volumetric viscosity (default = 0)
+        
+6. maxwell_wiechert
+    * Set up maxwell elemnet and elastic model components
+        
+        
+        
+        
+        
+        
