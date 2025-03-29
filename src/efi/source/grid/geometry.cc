@@ -371,12 +371,12 @@ ImportedGeometry<dim>::create_triangulation (dealii::Triangulation<dim> &tria)
                     double mu_element = 0.0;
 
                     if (fa_value == 0.0) {
-                        // Falls der FA-Wert 0.0 ist, setze den mu-Wert auf 10e-6
+                        //Falls der FA-Wert 0.0 ist, setze den mu-Wert auf 10e-6
                         mu_element = 10e-6;
                     } else {
                         // Andernfalls berechne den mu-Wert mit der Formel
-                        mu_element = fa_value;
-                        //mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
+                        //mu_element = fa_value;
+                        mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
                     }
 
                     // Speichere den berechneten mu-Wert in den Container

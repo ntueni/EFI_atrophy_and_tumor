@@ -15,7 +15,7 @@ subsection experiment
 
     subsection geometry@[type=import]
       set inpFile = rampp_UCD_orig.inp
-      set muFile = rampp_UCD_FA_modified.inp
+      set muFile = rampp_UCD_FA.inp
     end  
 
 	# AMYGDALA (Am), 468 elements
