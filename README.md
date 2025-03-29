@@ -5,9 +5,8 @@ mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
 As an Input the files rampp_UCD_orig.inp, ramp_UCD_FA.inp and  rampp_atrophy_9R.prm are needed. Make sure to set the right input and output directory for your workspace.
 If you follow the following commands to set up the deal.ii container (I renamed the folder to master_FA1), the directorys should fit to the downloaded files:
 
-docker run -it --name master_of_puppets -v "C:\Users\pumab\Documents\master_atrophy_FA1\src":/workspace/src -w /workspace/src dealii/dealii:v9.3.0-focal bash
-
 <pre><code>
+docker run -it --name master_of_puppets -v "C:\Users\pumab\Documents\master_atrophy_FA1\src":/workspace/src -w /workspace/src dealii/dealii:v9.3.0-focal bash
 ls -la /workspace/src
 sudo chown -R dealii:dealii /workspace/src
 sudo mkdir /workspace/myproject
