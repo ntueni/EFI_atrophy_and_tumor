@@ -59,19 +59,17 @@ evaluate (ScratchData<dim> &scratch_data) const
     double local_kappa = 2.0 * current_mu * (1.0 + this->nu) / (3.0 * (1.0 - 2.0 * this->nu));
 
     // Debug Information for local kappa and local mu
-    {
-         std::ofstream debugFile("/workspace/src/debug_mu_modified_ogden.txt", std::ios::app);
-         if (debugFile.is_open())
-         {
-            debugFile << "Current cell id: " 
-                      << scratch_data.get_current_fe_values().get_cell()->id()
-                      << ", current_mu: " << current_mu 
-                      << ", local_kappa: " << local_kappa << std::endl;
-            debugFile.close();
-        }
-    }
-
-    // ... Hier folgt der Rest der Berechnungen (z. B. Eigenwertzerlegung, Spannungsberechnungen etc.)
+    //{
+    //     std::ofstream debugFile("/workspace/src/debug_mu_modified_ogden.txt", std::ios::app);
+    //     if (debugFile.is_open())
+    //     {
+    //        debugFile << "Current cell id: " 
+    //                  << scratch_data.get_current_fe_values().get_cell()->id()
+    //                  << ", current_mu: " << current_mu 
+    //                  << ", local_kappa: " << local_kappa << std::endl;
+    //        debugFile.close();
+    //    }
+    //}
 
 
     // Get the number of quadrature points:

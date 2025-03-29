@@ -595,16 +595,16 @@ assemble ()
                 return;
             try
             {
-                // Ermittlung des Zellindexes:
+                // cell index
                 const unsigned int cell_index = cell->active_cell_index(); 
 
-                // Zugriff auf den mu-Vektor aus der Geometry:
+                // access mu-vector from geometry
                 const std::vector<double>& mu_values = this->geometry->get_mu_values();
 
-                // Setze einen Standardwert (z.B. aus den globalen Constitutive-Parametern oder ein fester Wert)
-                double local_mu = 1.396654e-04; // Standardwert, falls kein spezifischer mu vorhanden ist
+                // default value
+                double local_mu = 1.396654e-04;
 
-                // Wenn ein Wert für diese Zelle vorhanden ist, verwende diesen:
+                // change default value to value from muFile
                 if (cell_index < mu_values.size())
                 {
                     local_mu = mu_values[cell_index];
@@ -617,17 +617,16 @@ assemble ()
                         << std::endl;
                 }
 
-                // --- Änderung: statt globalem HistoryData aus scratch_data, hole den zell-spezifischen Datensatz ---
+                // call based data instead of global data
                 auto &cell_history = this->cell_data_history_storage->get_data(cell);
                 cell_history.add_or_overwrite_copy("local_mu", local_mu);
                 cell_history.add_or_overwrite_copy("element_number", cell_index);
 
-                // Speichere den lokalen mu-Wert in den HistoryData,
-                // damit das Constitutive Model darauf zugreifen kann.
+                //save local mu values in HistoryData to allow access by constitutive model
                 auto &tmp_history_data = ScratchDataTools::get_tmp_history_data(scratch_data);
                 tmp_history_data.add_or_overwrite_copy("local_mu", local_mu);
 
-                // Rufe anschließend die Berechnung des Zellbeitrags auf:
+                // calculation of cell data
                 this->cell_worker->fill(
                     *(this->constitutive_model_map.at(cell->material_id())),
                     this->locally_relevant_solution,
@@ -637,9 +636,9 @@ assemble ()
 
 
                 //Debug
-                std::ofstream debugCell("/workspace/src/debug_local_mu_sample.txt", std::ios::app);
-                debugCell << "Element " << cell_index << ": local_mu = " << local_mu << std::endl;
-                debugCell.close();
+                //std::ofstream debugCell("/workspace/src/debug_local_mu_sample.txt", std::ios::app);
+                //debugCell << "Element " << cell_index << ": local_mu = " << local_mu << std::endl;
+                //debugCell.close();
 
             }
             catch (ExceptionBase &exec)

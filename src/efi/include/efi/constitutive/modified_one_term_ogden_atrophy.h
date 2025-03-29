@@ -147,7 +147,10 @@ private:
     scalar_type mu;
 
     /// Bulk modulus.
-    scalar_type kappa; 
+    ///scalar_type kappa; 
+
+    ///Poissons Ratio
+    scalar_type nu;
     
     /// Empirical coefficient.
     scalar_type beta;
@@ -175,7 +178,7 @@ ModifiedOneTermOgdenAtrophy(const std::string &subsection_name,
       const std::string &unprocessed_input)
 :
     ConstitutiveBase<dim>(subsection_name,unprocessed_input),
-    kappa(1.),
+    //kappa(1.),
     beta(1.),
     G_h(0.),
     G_c(0.)
@@ -220,15 +223,15 @@ parse_parameters (dealii::ParameterHandler &prm)
 
     this->alpha = prm.get_double ("alpha");
     this->mu    = prm.get_double ("mu");
-    double nu = prm.get_double ("poisson ratio");
-    this->kappa = 2*this->mu*(1.0+nu)/3.0/(1.0-2.0*nu);
+    this->nu    = prm.get_double ("poisson ratio");
+    //this->kappa = 2*this->mu*(1.0+nu)/3.0/(1.0-2.0*nu);
     this->beta  = prm.get_double ("empirical coefficient");
     this->G_h = prm.get_double ("normal atrophy rate");
     this->G_c = prm.get_double ("enhanced atrophy rate");
 
-    efilog(Verbosity::verbose) << "kappa value: "
-                               << kappa
-                               << std::endl;
+    //efilog(Verbosity::verbose) << "kappa value: "
+                               //<< kappa
+                               //<< std::endl;
     efilog(Verbosity::verbose) << "normal atrophy rate: "
                                << this->G_h
                                << std::endl;

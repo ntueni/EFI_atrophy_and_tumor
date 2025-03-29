@@ -375,8 +375,8 @@ ImportedGeometry<dim>::create_triangulation (dealii::Triangulation<dim> &tria)
                         mu_element = 10e-6;
                     } else {
                         // Andernfalls berechne den mu-Wert mit der Formel
-                        //mu_element = fa_value;
-                        mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
+                        mu_element = fa_value;
+                        //mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
                     }
 
                     // Speichere den berechneten mu-Wert in den Container
@@ -398,20 +398,20 @@ ImportedGeometry<dim>::create_triangulation (dealii::Triangulation<dim> &tria)
         }
     }
     // Debug .txt file to compare the imported mu values with the .inp File
-    std::ofstream debugFile("/workspace/src/debug_mu_geometry.txt");
-    if (debugFile.is_open())
-    {
-        debugFile << "mu values imported, total count: " << this->mu_values.size() << "\n";
-        for (size_t i = 0; i < this->mu_values.size(); ++i)
-        {
-            debugFile << "Element " << (i+1) << ": " << this->mu_values[i] << "\n";
-        }
-        debugFile.close();
-    }
-    else
-    {
-        efilog(Verbosity::normal) << "Could not open debug file for writing." << std::endl;
-    }
+    //std::ofstream debugFile("/workspace/src/debug_mu_geometry.txt");
+    //if (debugFile.is_open())
+    //{
+    //    debugFile << "mu values imported, total count: " << this->mu_values.size() << "\n";
+    //    for (size_t i = 0; i < this->mu_values.size(); ++i)
+    //    {
+    //        debugFile << "Element " << (i+1) << ": " << this->mu_values[i] << "\n";
+    //    }
+    //    debugFile.close();
+    //}
+    //else
+    //{
+    //    efilog(Verbosity::normal) << "Could not open debug file for writing." << std::endl;
+    //}
 }
 
 // Instantiation
