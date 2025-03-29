@@ -147,8 +147,8 @@ private:
     scalar_type mu;
 
     /// Bulk modulus.
-    scalar_type kappa;
-
+    scalar_type kappa; 
+    
     /// Empirical coefficient.
     scalar_type beta;
 
@@ -157,6 +157,9 @@ private:
 
     /// Enhanced rate of atrophy due to concentration.
     scalar_type G_c;
+
+    /// local, element based mu value
+    mutable double current_mu;
 };
 
 

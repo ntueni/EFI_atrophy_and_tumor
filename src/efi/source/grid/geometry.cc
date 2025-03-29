@@ -273,6 +273,9 @@ ImportedGeometry (const std::string &subsection_name,
 
     this->add_parameter("inpFile", this->inpFile, "", ParameterAcceptor::prm,
             Patterns::Anything());
+    
+    this->add_parameter("muFile",  this->muFile,  "", ParameterAcceptor::prm,
+        Patterns::Anything());
 
 
     efilog(Verbosity::verbose) << "New Geometry imported ("
@@ -311,36 +314,104 @@ parse_parameters (dealii::ParameterHandler &param)
 template <int dim>
 inline
 void
-ImportedGeometry<dim>::
-create_triangulation (dealii::Triangulation<dim> &tria)
+ImportedGeometry<dim>::create_triangulation (dealii::Triangulation<dim> &tria)
 {
-        using namespace dealii;
-        std::string inputFileName = this->inpFile;
+    using namespace dealii;
+    std::string inputFileName = this->inpFile;  // Semikolon hinzugefügt
 
-        boost::filesystem::path input_directory = 
-            GlobalParameters::get_input_directory();
+    boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
+    // Shortcut: Verwende den statischen Member für das bevorzugte Pfadtrennzeichen
+    std::string sep(1, boost::filesystem::path::preferred_separator);
+    // Erzeugen des vollständigen Pfads zur Eingabedatei
+    std::string path_inp = input_directory.string() + sep + inputFileName;
+    
+    efilog(Verbosity::verbose) << "Importing geometry <" << path_inp << ">" << std::endl;
 
-        // Just a shortcut for the separator
-        // in the file path
-        std::string sep (1,input_directory.separator);
+    std::ifstream istream(path_inp);
+    dealii::GridIn<dim> gridIn;
+    gridIn.attach_triangulation(tria);
+    gridIn.read_ucd(istream);
 
-        // Get the paths of the output files
-        std::string path_inp  = input_directory.string() + sep + inputFileName;
-        efilog(Verbosity::verbose) << "Importing geometry <"
-                                    << path_inp
-                                    << ">" << std::endl;
-        std::ifstream istream(path_inp);
-        dealii::GridIn<dim> gridIn;
-        gridIn.attach_triangulation(tria);
-        gridIn.read_ucd(istream);
+    efilog(Verbosity::verbose) << "New Geometry imported." << std::endl;
 
-        efilog(Verbosity::verbose) << "New Geometry imported." << std::endl;
+    this->setNumberOfCells(tria.n_active_cells());
+    this->printMeshInformation(tria);
 
-        this->setNumberOfCells(tria.n_active_cells());
-        // unsigned int num_mat_1 = 0;        
+     // Reading of the FA-Values from rampp_UCD2.inp
+    if (!this->muFile.empty())
+    {
+        std::string path_mu = input_directory.string() + sep + this->muFile;
+        efilog(Verbosity::verbose) << "Importing mu values from <" << path_mu << ">" << std::endl;
+        std::ifstream muStream(path_mu);
+        if (!muStream)
+        {
+            efilog(Verbosity::normal) << "Could not open mu file: " << path_mu << std::endl;
+        }
+        else
+        {
+            std::string line;
+            while (std::getline(muStream, line))
+            {
+                // Jump over empty lines and header (Header lines begin with '#')
+                if (line.empty() || line[0]=='#')
+                    continue;
+                std::istringstream iss(line);
+                std::vector<std::string> tokens;
+                std::string token;
+                // Divide the lines into tokens
+                while (iss >> token)
+                    tokens.push_back(token);
+                // Jump over lines with the wrong number of tokens (Knot table has only 5 tokens: Number, x,y,z, FA-Value)
+                if (tokens.size() < 6)
+                    continue;
+                try
+                {
+                    // FA-Value is written in the last column
+                    double fa_value = std::stod(tokens.back());
+                    double mu_element = 0.0;
 
-        
-        this->printMeshInformation(tria);
+                    if (fa_value == 0.0) {
+                        // Falls der FA-Wert 0.0 ist, setze den mu-Wert auf 10e-6
+                        mu_element = 10e-6;
+                    } else {
+                        // Andernfalls berechne den mu-Wert mit der Formel
+                        mu_element = fa_value;
+                        //mu_element = (-(fa_value / 0.0037) + 182.4)*1e-6;
+                    }
+
+                    // Speichere den berechneten mu-Wert in den Container
+                    this->mu_values.push_back(mu_element);
+                }
+                catch (const std::invalid_argument &e)
+                {
+                    efilog(Verbosity::normal) << "Conversion failed for token: " 
+                                            << tokens.back() << std::endl;
+                }
+                catch (const std::out_of_range &e)
+                {
+                    efilog(Verbosity::normal) << "Token out of range: " 
+                                            << tokens.back() << std::endl;
+                }
+            }
+            efilog(Verbosity::verbose) << "mu values imported, total count: " 
+                                    << this->mu_values.size() << std::endl;
+        }
+    }
+    // Debug .txt file to compare the imported mu values with the .inp File
+    std::ofstream debugFile("/workspace/src/debug_mu_geometry.txt");
+    if (debugFile.is_open())
+    {
+        debugFile << "mu values imported, total count: " << this->mu_values.size() << "\n";
+        for (size_t i = 0; i < this->mu_values.size(); ++i)
+        {
+            debugFile << "Element " << (i+1) << ": " << this->mu_values[i] << "\n";
+        }
+        debugFile.close();
+    }
+    else
+    {
+        efilog(Verbosity::normal) << "Could not open debug file for writing." << std::endl;
+    }
 }
 
 // Instantiation

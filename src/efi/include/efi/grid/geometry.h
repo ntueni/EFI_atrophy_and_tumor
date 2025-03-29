@@ -82,6 +82,12 @@ public:
     virtual
     boost::signals2::connection
     connect_constraints (Sample<dim> &sample) const;
+
+    // Add virtual method
+    virtual const std::vector<double>& get_mu_values() const { 
+        static const std::vector<double> empty;
+        return empty;
+    }
 };
 
 
@@ -291,10 +297,11 @@ public:
     void printMeshInformation(const dealii::Triangulation<dim> &);
 
     protected:
-
-    std::string
-    inpFile;
-
+    std::string inpFile;    // bestehender Parameter für rampp_UCD.inp
+    std::string muFile;   // neuer Parameter für rampp_UCD2.inp
+    std::vector<double> mu_values; // Vektor zur Speicherung der voxelspezifischen FA-Werte
+    public:
+    virtual const std::vector<double>& get_mu_values() const { return mu_values; }
 };
 
 

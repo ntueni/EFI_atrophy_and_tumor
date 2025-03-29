@@ -617,6 +617,18 @@ namespace efi_internal {
 
 }//namespace efi_internal
 
+template <int dim>
+inline dealii::GeneralDataStorage &
+get_history_data_for_cell(ScratchData<dim> &scratch_data, unsigned int cell_index)
+{
+    Assert (scratch_data.get_general_data_storage().stores_object_with_name("history_data_storage"),
+            dealii::ExcMessage ("No object with name history_data_storage stored in ScratchData::user_data_storage."));
+
+    return scratch_data.get_general_data_storage()
+        .template get_object_with_name<GeneralCellDataStorage>("history_data_storage")
+        .get_data_by_index(cell_index);
+}
+
 }//namespace ScratchDataTools
 
 

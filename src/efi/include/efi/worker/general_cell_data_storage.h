@@ -56,9 +56,12 @@ public:
     void
     initialize (const CellIteratorRange &cells);
 
+    /// New Method to get the HistoryData from the cells at the point where they are assigned with 'index'
+    dealii::GeneralDataStorage& get_data_by_index(unsigned int index);
+
 private:
 
-    /// Map of cell-IDs to the stored data.
+     /// Map of cell-IDs to the stored data.
     std::map<dealii::CellId,dealii::GeneralDataStorage> cell_data;
 };
 

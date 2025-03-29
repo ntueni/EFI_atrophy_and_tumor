@@ -489,7 +489,7 @@ reinit_sparsity ()
     std::vector<std::vector<dealii::types::global_dof_index>>
             sample_sparsity_copy_data;
 
-    auto cell_woker =
+    auto cell_worker =
             [&](const CellIteratorType &cell,
                 ScratchData<dim>       &/*dummy*/,
                 std::vector<std::vector<dealii::types::global_dof_index>>
@@ -527,7 +527,7 @@ reinit_sparsity ()
 
     mesh_loop (this->dof_handler.begin_active(),
                this->dof_handler.end(),
-               cell_woker,
+               cell_worker,
                copier,
                *(this->sample_scratch_data),
                sample_sparsity_copy_data,
@@ -586,29 +586,68 @@ assemble ()
     using CellIteratorType = decltype(this->dof_handler.begin_active());
 
     // Loop over material types and set up system?
-    auto cell_woker =
-            [&](const CellIteratorType &cell,
-                ScratchData<dim>       &scratch_data,
-                CopyData               &copy_data)
+    auto cell_worker =
+    [&](const CellIteratorType &cell,
+        ScratchData<dim> &scratch_data,
+        CopyData &copy_data)
+        {
+            if (this->state == State::failure)
+                return;
+            try
+            {
+                // Ermittlung des Zellindexes:
+                const unsigned int cell_index = cell->active_cell_index(); 
+
+                // Zugriff auf den mu-Vektor aus der Geometry:
+                const std::vector<double>& mu_values = this->geometry->get_mu_values();
+
+                // Setze einen Standardwert (z.B. aus den globalen Constitutive-Parametern oder ein fester Wert)
+                double local_mu = 1.396654e-04; // Standardwert, falls kein spezifischer mu vorhanden ist
+
+                // Wenn ein Wert für diese Zelle vorhanden ist, verwende diesen:
+                if (cell_index < mu_values.size())
                 {
-                    if (this->state == State::failure)
-                        return;
-                    try
-                    {
-                        this->cell_worker->fill (
-                              *(this->constitutive_model_map.at(cell->material_id())),
-                                this->locally_relevant_solution,
-                                cell,
-                                scratch_data,
-                                copy_data);
-                    }
-                    catch (ExceptionBase &exec)
-                    {
-                        this->state = State::failure;
-                        efilog(Verbosity::normal) << "CellWorker failed HERE "
-                                                  << std::endl;
-                    }
-                };
+                    local_mu = mu_values[cell_index];
+                }
+                else
+                {
+                    efilog(Verbosity::normal)
+                        << "Warnung: Kein mu-Wert für Zelle " << cell_index 
+                        << " gefunden. Standardwert " << local_mu << " wird verwendet." 
+                        << std::endl;
+                }
+
+                // --- Änderung: statt globalem HistoryData aus scratch_data, hole den zell-spezifischen Datensatz ---
+                auto &cell_history = this->cell_data_history_storage->get_data(cell);
+                cell_history.add_or_overwrite_copy("local_mu", local_mu);
+                cell_history.add_or_overwrite_copy("element_number", cell_index);
+
+                // Speichere den lokalen mu-Wert in den HistoryData,
+                // damit das Constitutive Model darauf zugreifen kann.
+                auto &tmp_history_data = ScratchDataTools::get_tmp_history_data(scratch_data);
+                tmp_history_data.add_or_overwrite_copy("local_mu", local_mu);
+
+                // Rufe anschließend die Berechnung des Zellbeitrags auf:
+                this->cell_worker->fill(
+                    *(this->constitutive_model_map.at(cell->material_id())),
+                    this->locally_relevant_solution,
+                    cell,
+                    scratch_data,
+                    copy_data);
+
+
+                //Debug
+                std::ofstream debugCell("/workspace/src/debug_local_mu_sample.txt", std::ios::app);
+                debugCell << "Element " << cell_index << ": local_mu = " << local_mu << std::endl;
+                debugCell.close();
+
+            }
+            catch (ExceptionBase &exec)
+            {
+                this->state = State::failure;
+                efilog(Verbosity::normal) << "CellWorker failed HERE" << std::endl;
+            }
+        };
 
 
     auto boundary_woker =
@@ -646,7 +685,7 @@ assemble ()
 
     mesh_loop (this->dof_handler.begin_active(),
                this->dof_handler.end(),
-               cell_woker,
+               cell_worker,
                copier,
                *(this->sample_scratch_data),
                *(this->sample_copy_data),
