@@ -1,3 +1,26 @@
+## Description master_atrophy_FA2_compare ##
+
+The main use of this script is to compare the results from branch “master_atrophy_FA2” with “master_atrophy”. Just make sure to use the rampp_atrophy_9R.prm file with mu values (FAU Box “https://faubox.rrze.uni-erlangen.de/getlink/fiJaWNGySJzjBPQz21mjKr/EFI_Atrophy_and_Tumor_original”) and compare the results to the output of  this branch.
+As an Input the files rampp_UCD_orig.inp, ramp_UCD_FA_modified.inp and  rampp_atrophy_9R.prm are needed. Make sure to set the right input and output directory for your workspace.
+If you follow the following commands to set up the deal.ii container (I renamed the folder to master_FA1), the directorys should fit to the downloaded files:
+
+<pre><code>
+docker run -it --name master_of_puppets -v "C:\Users\pumab\Documents\master_atrophy_FA1\src":/workspace/src -w /workspace/src dealii/dealii:v9.3.0-focal bash
+ls -la /workspace/src
+sudo chown -R dealii:dealii /workspace/src
+sudo mkdir /workspace/myproject
+cd /workspace/myproject
+sudo mkdir build
+cd build
+cmake /workspace/src
+sudo apt-get update 
+sudo apt-get install libboost-all-dev
+sudo chmod -R 777 /workspace/myproject/build
+cmake /workspace/src
+make -j4
+./efi_vlab 4 /workspace/src/rampp_atrophy_9R.prm
+</code></pre>
+
 
 ## Installation
 
