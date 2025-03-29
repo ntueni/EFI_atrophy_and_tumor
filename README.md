@@ -1,6 +1,6 @@
 ## Description master_atrophy_FA2_compare ##
 
-The main use of this script is to compare the results from branch “master_atrophy_FA2” with “master_atrophy”. Just make sure to use the rampp_atrophy_9R.prm file with mu values (FAU Box “https://faubox.rrze.uni-erlangen.de/getlink/fiJaWNGySJzjBPQz21mjKr/EFI_Atrophy_and_Tumor_original”) and compare the results to the output of  this branch.
+The main use of this script is to compare the results from branch “master_atrophy_FA2” with “master_atrophy”. Just make sure to use the rampp_atrophy_9R.prm file with mu values (FAU Box "Brain_Segmentation" -> Input_FA_Pipeline -> EFI_Atrophy_and_Tumor_original) and compare the results to the output of  this branch.
 As an Input the files rampp_UCD_orig.inp, ramp_UCD_FA_modified.inp and  rampp_atrophy_9R.prm are needed. Make sure to set the right input and output directory for your workspace.
 If you follow the following commands to set up the deal.ii container (I renamed the folder to master_FA1), the directorys should fit to the downloaded files:
 
