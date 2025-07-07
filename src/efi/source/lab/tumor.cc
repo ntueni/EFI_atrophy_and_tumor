@@ -172,16 +172,12 @@ run (Sample<dim> &sample)
 {
     using namespace dealii;
 
-    // Set the constraints.
+    // Set the constraints (no tumor boundary constraints now)
     boost::signals2::connection connection_constraints =
             this->connect_constraints(sample);
     sample.reinit_constraints ();
 
-    std::map<dealii::types::global_dof_index,double> prescribed;
-
-    auto &dof_handler = sample.get_dof_handler ();
-    auto &mapping     = sample.get_mapping ();
-
+    // Force measurement setup (unchanged)
     GetConstrainedBoundaryIDs constr_boundary_ids;
     sample.get_geometry().accept (constr_boundary_ids);
 
@@ -196,8 +192,12 @@ run (Sample<dim> &sample)
                                        force_copier,
                                        sample.signals.post_nonlinear_solve);
 
-    std::map<types::global_dof_index, double> boundary_values;
-
+    // Store boundary normal vectors and growth load
+    std::map<types::global_dof_index, Vector<double>> boundary_normal;
+    double current_growth_load = 0.0;
+    
+    // Get boundary normals (keep existing code)
+    auto &dof_handler = sample.get_dof_handler ();
     auto &fe = sample.get_fe();
     Quadrature<dim-1> face_quadrature(fe.get_unit_face_support_points());
     FEFaceValues<dim> fe_values_face(fe, face_quadrature, update_quadrature_points | update_normal_vectors);
@@ -205,59 +205,55 @@ run (Sample<dim> &sample)
     const unsigned int dofs_per_face = fe.n_dofs_per_face();
     const unsigned int n_face_q_points = face_quadrature.size();
 
-    std::map<types::global_dof_index, Vector<double>> boundary_normal;
-    
     std::vector<types::global_dof_index> dof_indices(dofs_per_face);
-    efilog(Verbosity::verbose) << "Getting boundary normals" << std::endl;
-    //TODO: Get normals of of tumor boundary: save normal at a dof
+    
+    // Calculate boundary normals (keep existing normal calculation code)
     for (const auto & cell : dof_handler.active_cell_iterators())
-                if(!cell->is_artificial() && cell->at_boundary())
-                    for (const auto & face : cell->face_iterators())
-                        if (face->at_boundary())
-                                if (face->boundary_id() == constr_boundary_ids.inhomogeneous)
-                                {
-                                    // area += face->measure();
-                                    fe_values_face.reinit(cell, face);
-                                    face->get_dof_indices(dof_indices);
-                                    for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
-                                    {
-                                        const int index = dof_indices[q_point];
-                                        auto face_normal = fe_values_face.normal_vector(q_point);
-                                        auto qp = fe_values_face.quadrature_point(q_point);
-                                        auto position = boundary_normal.find(index);
-                                            if (position == boundary_normal.end()){
-                                                // std::cout << index << ":"<<  qp << std::endl;
-                                                Vector<double> normal(dim);
-                                                for (int d =0; d<dim; d++){
-                                                    normal[d] = face_normal[d];
-                                                }
-                                                boundary_normal.insert(std::pair<dealii::types::global_dof_index,Vector<double>>(index, normal));
-                                            } else {
-                                                Vector<double> normal = position->second;
-                                                for (int d =0; d<dim; d++){
-                                                    normal(d) += face_normal[d];
-                                                }
-                                                position->second = normal;
-                                            }
-                                        }
-                                    }
+        if(!cell->is_artificial() && cell->at_boundary())
+            for (const auto & face : cell->face_iterators())
+                if (face->at_boundary())
+                    if (face->boundary_id() == constr_boundary_ids.inhomogeneous)
+                    {
+                        fe_values_face.reinit(cell, face);
+                        face->get_dof_indices(dof_indices);
+                        for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
+                        {
+                            const int index = dof_indices[q_point];
+                            auto face_normal = fe_values_face.normal_vector(q_point);
+                            auto position = boundary_normal.find(index);
+                            if (position == boundary_normal.end()){
+                                Vector<double> normal(dim);
+                                for (int d =0; d<dim; d++){
+                                    normal[d] = face_normal[d];
+                                }
+                                boundary_normal.insert(std::pair<dealii::types::global_dof_index,Vector<double>>(index, normal));
+                            } else {
+                                Vector<double> normal = position->second;
+                                for (int d =0; d<dim; d++){
+                                    normal(d) += face_normal[d];
+                                }
+                                position->second = normal;
+                            }
+                        }
+                    }
                                 
+    // Normalize the boundary normals
     for (auto iter = boundary_normal.begin(); iter != boundary_normal.end(); iter++){
         double norm = iter->second.l2_norm();
         for (int d =0; d<dim; d++){
             iter->second(d) = iter->second(d)/norm;
         }
-        // std::cout << iter->first << ":"<<  iter->second << std::endl;
     }
+
+    // Store boundary normals and growth info in sample for access during assembly
+    // You'll need to add these as member variables or pass them through ScratchData
+    sample.set_tumor_boundary_normals(boundary_normal);
+    sample.set_tumor_boundary_id(constr_boundary_ids.inhomogeneous);
 
     std::vector<double> times;
     std::vector<double> forces;
     std::vector<double> displacements;
 
-    // When the prescribed displacement per step is too large, the algorithm
-    // reduces the step width and tries to apply the the boundary conditions
-    // in smaller steps. However, sometimes this wont help, therefore the number
-    // of allowed refinements of the step width is limited to 5.
     unsigned int refinement_lvl = 0;
 
     for (InputData &input : this->input_data)
@@ -270,62 +266,34 @@ run (Sample<dim> &sample)
         {
             force = 0;
 
-            double time      = input.data[step].first;
+            double time = input.data[step].first;
             double previous_time = step>0? input.data[step-1].first : time;
 
             Assert (time > previous_time - 1e-20,
-                    ExcMessage("Negative time step size detected: "
-                               "corrupted test protocol."));
+                    ExcMessage("Negative time step size detected."));
 
-            // Compute the step size
-            double dt = time-previous_time;
+            double dt = time - previous_time;
+            double amount_of_growth = input.data[step].second;
+            
+            // Store the current growth load for use in assembly
+            current_growth_load = amount_of_growth;
+            sample.set_tumor_growth_load(current_growth_load);
 
-            double amount_of_growth= input.data[step].second;
-            boundary_values.clear();
-            efilog(Verbosity::normal) << "amount_of_growth: " << amount_of_growth << std::endl;
+            efilog(Verbosity::normal) << "Growth load: " << amount_of_growth << std::endl;
 
-            for (auto iter = boundary_normal.begin(); iter != boundary_normal.end(); iter++){
-                double index = iter->first;
-                Vector<double> normal = iter->second;
-                for (int d =0; d<dim; d++){
-                    boundary_values.insert(std::pair<dealii::types::global_dof_index,double>(index+d, normal(d)*amount_of_growth*-1));
-                }
-            }
+            // No boundary values to set - growth is now handled as body force
+            std::map<dealii::types::global_dof_index,double> empty_boundary_values;
 
-            // std::vector<scalar_type> values(Extractor<dim>::n_components,0);
-
-            // // Note that the strain data is given in percent, therefore it must
-            // // be modified before it can be applied to the boundary.
-            // values[Extractor<dim>::first_displacement_component]
-            //          = amount_of_shear;
-            // Functions::ConstantFunction<dim> boundary_function (values);
-
-            // efilog(Verbosity::debug) << "displacement:" << amount_of_shear;
-
-            // std::vector<bool> selector(Extractor<dim>::n_components,false);
-            // selector[Extractor<dim>::first_displacement_component]
-            //          = true;
-
-            // VectorTools::interpolate_boundary_values (
-            //         mapping, dof_handler, constr_boundary_ids.inhomogeneous,
-            //         boundary_function, boundary_values,
-            //         ComponentMask(selector));
-
-            if (sample.run (boundary_values, dt, amount_of_growth))
+            if (sample.run (empty_boundary_values, dt, amount_of_growth))
             {
-                // When the refinement level is zero, then we have reached a
-                // time step for which experimental data is available.
-                // Hence, to be able to compare our results with the
-                // experimental data, we write the simulation results to the
-                // output arrays.
                 if (refinement_lvl == 0)
                 {
-                    // // Write to data arrays
-                    // times.push_back (time);
-                    // displacements.push_back (input.data[step].second);
-                    // forces.push_back (
-                    //         Utilities::MPI::sum(force[translation_axis],
-                    //                             this->mpi_communicator));
+                    // Store results for output
+                    times.push_back (time);
+                    displacements.push_back (input.data[step].second);
+                    forces.push_back (
+                            Utilities::MPI::sum(force[0], // assuming growth in x-direction
+                                             this->mpi_communicator));
                 }
 
                 if (refinement_lvl > 0)
@@ -333,9 +301,9 @@ run (Sample<dim> &sample)
             }
             else
             {
+                // Handle failed convergence with time step refinement
                 if (step == 0)
                 {
-                    // Insert a new intermediate step (linearly interpolated)
                     input.data.insert(input.data.begin(),
                             std::make_pair (
                                  0.5 * (input.data[0].first),
@@ -343,9 +311,6 @@ run (Sample<dim> &sample)
                 }
                 else
                 {
-                    // TODO Use a higher order interpolation scheme to guess
-                    // intermediate values.
-                    // Insert a new intermediate step (linearly interpolated)
                     input.data.insert(input.data.begin() + step,
                             std::make_pair (
                                  0.5 * (input.data[step-1].first
@@ -355,57 +320,27 @@ run (Sample<dim> &sample)
                 }
 
                 AssertThrow (++refinement_lvl < 10,
-                        dealii::ExcMessage ("Time step refinement level > 5."));
+                        dealii::ExcMessage ("Time step refinement level > 10."));
                 --step;
             }
         }
 
+        // Output results (unchanged)
         if (MPI::is_root(this->mpi_communicator))
         {
-            boost::filesystem::path infilepath  = input.filename;
-
+            boost::filesystem::path infilepath = input.filename;
             boost::filesystem::path outdir = GlobalParameters::get_output_directory();
-
-            boost::filesystem::path outfilename
-                = outdir / infilepath.filename();
+            boost::filesystem::path outfilename = outdir / infilepath.filename();
 
             io::CSVWriter<3> out(outfilename.string());
             out.write_headers(this->column_name_displacement,"force","time");
             out.write_rows(displacements,forces,times);
         }
-
-//        // Open a gnuplot stream. Only the root process is allowed
-//        // to send data.
-//        GnuplotStream gnuplot (MPI::is_root(this->mpi_communicator));
-//
-//        gnuplot << "set term wxt noraise size 1000,400\n";
-//        gnuplot << "set multiplot layout 1, 2 title 'shear test'\n";
-//        gnuplot << "set bmargin 5\n";
-//
-//        gnuplot << "set title 'force vs. displacement'\n";
-//        gnuplot << "set grid\n";
-//        gnuplot << "set xlabel 'displacement'\n";
-//        gnuplot << "set ylabel 'force'\n";
-//        GnuplotStream::plot (gnuplot, displacements, forces);
-//
-//        gnuplot << "set title 'stress vs. time'\n";
-//        gnuplot << "set grid\n";
-//        gnuplot << "set xlabel 'time [s]'\n";
-//        gnuplot << "set ylabel 'force'\n";
-//        GnuplotStream::plot (gnuplot, times, forces);
-//
-//        gnuplot << "unset multiplot\n";
     }
 
-    // Disconnect the remaining signals such that they do not interfere with
-    // other testing devices that might be run afterwards or we might run
-    // into other problems when e.g. the workers of the boundary loop go out
-    // of scope.
     connection_constraints.disconnect();
     connection_force.disconnect();
 }
-
-
 
 // Instantiation
 template class Tumor<2>;
