@@ -633,31 +633,66 @@ assemble ()
                 };
 
 
-    auto boundary_woker =
-            [&](const CellIteratorType &cell,
-                const unsigned int      face_no,
-                ScratchData<dim>       &scratch_data,
-                CopyData               &copy_data)
-                {
-                    if (this->state == State::failure)
-                        return;
-                    try
-                    {
-                        this->boundary_worker->fill (
-                                *(this->constitutive_model_map.at(cell->material_id())),
-                                this->locally_relevant_solution,
-                                cell,
-                                face_no,
-                                scratch_data,
-                                copy_data);
-                    }
-                    catch (ExceptionBase &exec)
-                    {
-                        this->state = State::failure;
-                        efilog(Verbosity::normal) << "BoundaryWorker failed."
-                                                  << std::endl;
-                    }
-                };
+    // auto boundary_woker =
+    //         [&](const CellIteratorType &cell,
+    //             const unsigned int      face_no,
+    //             ScratchData<dim>       &scratch_data,
+    //             CopyData               &copy_data)
+    //             {
+    //                 if (this->state == State::failure)
+    //                     return;
+    //                 try
+    //                 {
+    //                     this->boundary_worker->fill (
+    //                             *(this->constitutive_model_map.at(cell->material_id())),
+    //                             this->locally_relevant_solution,
+    //                             cell,
+    //                             face_no,
+    //                             scratch_data,
+    //                             copy_data);
+    //                 }
+    //                 catch (ExceptionBase &exec)
+    //                 {
+    //                     this->state = State::failure;
+    //                     efilog(Verbosity::normal) << "BoundaryWorker failed."
+    //                                               << std::endl;
+    //                 }
+    //             };
+
+
+    auto boundary_worker =
+    [&](const CellIteratorType &cell,
+	const unsigned int      face_no,
+	ScratchData<dim>       &scratch_data,
+	CopyData               &copy_data)
+	{
+	    if (this->state == State::failure)
+		return;
+	    try
+	    {
+		// Standard boundary worker
+		this->boundary_worker->fill (
+			*(this->constitutive_model_map.at(cell->material_id())),
+			this->locally_relevant_solution,
+			cell,
+			face_no,
+			scratch_data,
+			copy_data);
+		
+		// Add tumor growth body force contribution
+		auto face = cell->face(face_no);
+		if (face->boundary_id() == this->tumor_boundary_id)
+		{
+		    this->apply_tumor_growth_body_force(cell, face_no, scratch_data, copy_data);
+		}
+	    }
+	    catch (ExceptionBase &exec)
+	    {
+		this->state = State::failure;
+		efilog(Verbosity::normal) << "BoundaryWorker failed."
+					  << std::endl;
+	    }
+	};
 
     
     auto copier = create_assembly_data_copier (
