@@ -104,10 +104,14 @@ connect_constraints (Sample<dim> &sample) const
 
         sample.get_geometry().accept (get_constr_boundary_ids);
 
-        for (auto id : {get_constr_boundary_ids.homogeneous,
-                        get_constr_boundary_ids.inhomogeneous})
-            DoFTools::make_zero_boundary_constraints (
-                    dof_handler, id, constraints, u_mask);
+        // for (auto id : {get_constr_boundary_ids.homogeneous,
+        //                 get_constr_boundary_ids.inhomogeneous})
+        //     DoFTools::make_zero_boundary_constraints (
+        //             dof_handler, id, constraints, u_mask);
+
+        DoFTools::make_zero_boundary_constraints (
+                dof_handler, get_constr_boundary_ids.homogeneous, 
+                constraints, u_mask);
 
     //     std::vector<bool> selectorX (Extractor<dim>::n_components,false);
     //     selectorX[Extractor<dim>::first_displacement_component] = true;
