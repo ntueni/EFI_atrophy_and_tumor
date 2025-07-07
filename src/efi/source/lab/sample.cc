@@ -30,7 +30,6 @@
 #include <efi/base/postprocessor.h>
 #include <efi/worker/scratch_data.h>
 #include <efi/base/global_parameters.h>
-#include <efi/grid/obstacle_factory.h>
 
 namespace efi {
 
@@ -118,6 +117,8 @@ Sample<dim>::
 declare_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
+    efilog(Verbosity::verbose) << "Sample started declaring parameters"
+                               << std::endl;
 
     //TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
@@ -149,6 +150,8 @@ Sample<dim>::
 parse_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
+    efilog(Verbosity::verbose) << "Sample started parsing parameters"
+                               << std::endl;
 
     //TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
@@ -179,16 +182,32 @@ parse_parameters (dealii::ParameterHandler &prm)
         this->qf_face.reset (new QuadratureSelector<dim-1>(quadrature_str,order));
     prm.leave_subsection ();
 
-        boost::filesystem::path input_directory = 
-                GlobalParameters::get_input_directory();
+    boost::filesystem::path input_directory = 
+        GlobalParameters::get_input_directory();
 
-        // input directory
-        std::string directory (input_directory.string()
-                            + std::string(1,input_directory.separator));
+    // input directory
+    std::string directory (input_directory.string()
+                        + std::string(1,input_directory.separator));
+
+    // prm.leave_subsection ();
 
     // just some output
     efilog(Verbosity::verbose) << "Sample finished parsing parameters"
                                << std::endl;
+}
+
+template <int dim>
+bool
+Sample<dim>::
+run (const std::map<dealii::types::global_dof_index,double> &prescribed,
+     const double dt, const double load)
+{
+    this->applied_load = load;
+    // Set the load
+    ScratchDataTools::get_or_add_load (
+            *(this->sample_scratch_data)) = this->applied_load;
+    
+    this->run(prescribed, dt);
 }
 
 
@@ -218,8 +237,6 @@ run (const std::map<dealii::types::global_dof_index,double> &prescribed,
     dealii::types::global_dof_index dof;
     double value;
     // Re-sets solution value to boundary value
-    // this->constraints.reinit(this->locally_relevant_dofs);
-    
     for (auto &el : prescribed)
     {
         std::tie(dof,value) = el;
@@ -228,8 +245,9 @@ run (const std::map<dealii::types::global_dof_index,double> &prescribed,
             {
                 this->locally_owned_solution.set(1, &dof, &value);
             }
+
     }
-    
+
     this->locally_owned_solution.compress(VectorOperation::insert);
     
     this->solve_nonlinear ();
@@ -295,7 +313,7 @@ instantiate (std::istream &unprocessed_input)
     actions[ConstitutiveFactory<dim>::keyword()] = create_contsitutive;
     actions[GeometryFactory<dim>::keyword()]     = create_geometry;
 
-    // Setup the Sample<dim> object using an input
+        // Setup the Sample<dim> object using an input
     // parameter file and the map of predefined
     // factories. Whenever ParameterTools::setup()
     // is able to parse a key in the input parameter
@@ -307,7 +325,7 @@ instantiate (std::istream &unprocessed_input)
     this->cell_worker.reset (new CellWorker<dim>());
     this->boundary_worker.reset (new BoundaryWorker<dim>());
 
-    // just some output
+        // just some output
     efilog(Verbosity::verbose) << "Sample parses unprocessed input."
                                << std::endl;
 }
@@ -426,8 +444,6 @@ reset()
             this->dof_handler.active_cell_iterators());
     this->tmp_cell_data_history_storage->initialize (
             this->dof_handler.active_cell_iterators());
-
-    efilog(Verbosity::debug) << "Sample reset." << std::endl;
 }
 
 template <int dim>
@@ -551,16 +567,14 @@ reinit_sparsity ()
                                this->locally_owned_dofs,
                                dynamic_sparsity_pattern,
                                this->mpi_communicator);
-
     // Free storage.
     dynamic_sparsity_pattern.reinit (0,0);
-
+    
     // Notify us know if this was successful.
     efilog(Verbosity::verbose) << "Sample finished initializing the"
                                   " sparsity pattern of the system_matrix."
                                << std::endl;
 }
-
 
 template <int dim>
 void
@@ -595,6 +609,14 @@ assemble ()
                         return;
                     try
                     {
+
+                        double load;
+                        if (cell->material_id() != 29)
+                        {
+                            this->constitutive_model_map.at(cell->material_id())->set_expansion(0.0);
+                        } else {
+                            this->constitutive_model_map.at(cell->material_id())->set_expansion(0.3);
+                        }
                         this->cell_worker->fill (
                               *(this->constitutive_model_map.at(cell->material_id())),
                                 this->locally_relevant_solution,
@@ -622,7 +644,7 @@ assemble ()
                     try
                     {
                         this->boundary_worker->fill (
-                                DataProcessorDummy (),
+                                *(this->constitutive_model_map.at(cell->material_id())),
                                 this->locally_relevant_solution,
                                 cell,
                                 face_no,
@@ -651,10 +673,9 @@ assemble ()
                *(this->sample_scratch_data),
                *(this->sample_copy_data),
                MeshWorker::assemble_own_cells
-                | MeshWorker::assemble_boundary_faces
-               | MeshWorker::cells_after_faces,
+                | MeshWorker::assemble_boundary_faces,
                boundary_woker);
-
+    
     // }
     // Perform all reduce the state such that the state
     // is consistent for all processors.
@@ -680,7 +701,7 @@ solve_linear ()
     TimerOutput::Scope timer_section(*(this->timer), EFI_PRETTY_FUNCTION);
 
     ReductionControl linear_solver_control (
-            10000, 1e-10, 1e-12, /*log_history*/ false, /*log_result*/ false);
+            10000, 1e-10, 1e-5, /*log_history*/ false, /*log_result*/ false);
 
     if (this->solver_control.get_linear_solver_type() == "direct")
     {
@@ -807,9 +828,7 @@ solve_nonlinear ()
         // locally relevant solution.
         this->locally_relevant_solution = this->locally_owned_solution;
 
-        
         this->assemble ();
-
         // Check if an assembly error occurred.
         if (this->state != State::success)
             break;
@@ -863,7 +882,6 @@ solve_nonlinear ()
 
 }
 
-
 template <int dim>
 void
 Sample<dim>::
@@ -905,31 +923,7 @@ write_output (const unsigned int step,
     } 
 
     out.add_data_vector(distributed_material_id,"material_ids");
-         
 
-    // add concentration
-    Vector<double> distributed_conc(tria.n_active_cells());
-    distributed_conc = 0.;
-    for( const auto cell : tria.active_cell_iterators())
-    {
-        auto cell_data  = this->cell_data_history_storage->get_data(cell);
-        double c = cell_data.template get_object_with_name<double>("concentration");
-        distributed_conc[cell->active_cell_index()] = c;
-    } 
-
-    out.add_data_vector(distributed_conc,"concentration");
-
-    // add degg atrophy
-    Vector<double> deg_atrophy(tria.n_active_cells());
-    deg_atrophy = 0.;
-    for( const auto cell : tria.active_cell_iterators())
-    {
-        auto cell_data  = this->cell_data_history_storage->get_data(cell);
-        double theta = cell_data.template get_or_add_object_with_name<double>("degree_atrophy", 1.0);
-        deg_atrophy[cell->active_cell_index()] = theta;
-    } 
-
-    out.add_data_vector(deg_atrophy,"degree_atrophy");
     // get the subdomain IDs
     types::subdomain_id locally_owned_subdomain =
             this->tria.locally_owned_subdomain ();
@@ -1035,6 +1029,41 @@ move_mesh(const  LA::MPI::Vector &displacement) const
                 }
     
 }
+
+template <int dim>
+double
+Sample<dim>::
+calculate_area(dealii::types::boundary_id id) const
+{
+    using namespace dealii;
+    double area_total = 0.;
+
+    for(const auto &cell: dof_handler.active_cell_iterators())
+        if (cell->is_locally_owned() && cell->at_boundary())
+            for (const auto & face : cell->face_iterators())
+                if ((face->at_boundary()) && (face->boundary_id() == id))
+                    area_total += face->measure();
+    
+    return area_total;
+    
+}
+
+template <int dim>
+void
+Sample<dim>::
+get_slave_pnt(const dealii::Point<dim> &support_pnt, 
+                dealii::Point<dim> &slave_pnt,
+                dealii::types::global_dof_index face_dof_indices)
+{
+    slave_pnt = support_pnt;
+    for (unsigned int v_index=0; v_index<dim;v_index++)
+    {
+        const unsigned int vertex_dof_index = face_dof_indices + v_index;
+        slave_pnt(v_index) += this->locally_relevant_solution(vertex_dof_index);
+    }                                       
+
+}
+
 
 
 // Instantiation

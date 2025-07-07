@@ -28,7 +28,7 @@
 #include <efi/base/gnuplot_stream.h>
 #include <efi/base/logstream.h>
 #include <efi/constitutive/constitutive_base.h>
-#include <efi/lab/retraction_ellipse.h>
+#include <efi/lab/retraction_expansion_tube.h>
 #include <efi/worker/measure_data_worker.h>
 #include <efi/base/global_parameters.h>
 
@@ -37,7 +37,7 @@ namespace efi {
 
 template <int dim>
 void
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 declare_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
@@ -49,24 +49,22 @@ declare_parameters (dealii::ParameterHandler &prm)
                     Patterns::List::max_int_value,
                     ","));
 
-    prm.declare_entry("major_diameter","major_diameter");
+    prm.declare_entry("diameter","diameter");
 
     using P = dealii::Patterns::Tools::Convert<Tensor<1,dim>>;        
     Point<dim> point;
     
     prm.declare_entry("center",P::to_string(point),*P::to_pattern(),"Documentation");
-    prm.declare_entry("minor diameter","4",Patterns::Double());
-    prm.declare_entry("major diameter","6",Patterns::Double());
-    prm.declare_entry("length","30",Patterns::Double());
+    prm.declare_entry("length","50",Patterns::Double());
 
-    efilog(Verbosity::verbose) << "RetractionEllipse"
+    efilog(Verbosity::verbose) << "RetractionExpansionTube"
                                   " finished declaring parameters."
                                << std::endl;
 }
 
 template <int dim>
 void
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 parse_parameters (dealii::ParameterHandler &prm)
 {
     using namespace dealii;
@@ -74,10 +72,7 @@ parse_parameters (dealii::ParameterHandler &prm)
     std::vector<std::string> files =
             Utilities::split_string_list(prm.get ("input files"),',');
 
-    this->depth_column_name = prm.get("major_diameter");
-
-    this->diameter_minor = prm.get_double("minor diameter");
-    this->diameter_major = prm.get_double("major diameter");
+    this->diameter_column_name = prm.get("diameter");
     this->length = prm.get_double("length");
 
     using P = dealii::Patterns::Tools::Convert<Tensor<1,dim>>;
@@ -86,10 +81,10 @@ parse_parameters (dealii::ParameterHandler &prm)
     boost::filesystem::path input_directory = GlobalParameters::get_input_directory();
     for (const auto &file : files){
         boost::filesystem::path full_path = input_directory / file;
-        this->read_test_protocol (full_path.string(),this->depth_column_name);
+        this->read_test_protocol (full_path.string(),this->diameter_column_name);
     }
 
-    efilog(Verbosity::verbose) << "RetractionEllipse "
+    efilog(Verbosity::verbose) << "RetractionExpansionTube "
                                   "finished parsing parameters."
                                << std::endl;
 }
@@ -98,7 +93,7 @@ parse_parameters (dealii::ParameterHandler &prm)
 
 template <int dim>
 boost::signals2::connection
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 connect_constraints (Sample<dim> &sample) const
 {
     using namespace dealii;
@@ -114,19 +109,11 @@ connect_constraints (Sample<dim> &sample) const
 
         sample.get_geometry().accept (constr_boundary_ids);
 
-        for (auto id : {constr_boundary_ids.homogeneous})
+        for (auto id : {constr_boundary_ids.homogeneous,
+                        constr_boundary_ids.inhomogeneousA,
+                        constr_boundary_ids.inhomogeneousB})
             DoFTools::make_zero_boundary_constraints (
                     dof_handler, id, constraints, u_mask);
-        
-        
-        std::vector<bool> selector (Extractor<dim>::n_components,false);
-        for (int d = 1; d < dim; d++){
-            selector[Extractor<dim>::first_displacement_component+d] = true;
-        }
-        dealii::ComponentMask inhom_mask (selector);
-        for (auto id : {constr_boundary_ids.inhomogeneous})
-            DoFTools::make_zero_boundary_constraints (
-                    dof_handler, id, constraints, inhom_mask);
     });
 
 }
@@ -135,7 +122,7 @@ connect_constraints (Sample<dim> &sample) const
 template <int dim>
 inline
 void
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 read_test_protocol (const std::string &filename,const std::string& column_name_displacement)
 {
     using namespace dealii;
@@ -158,7 +145,7 @@ read_test_protocol (const std::string &filename,const std::string& column_name_d
         indata.data.emplace_back(time, displacement);
     }
 
-    efilog(Verbosity::verbose) << "RetractionEllipse "
+    efilog(Verbosity::verbose) << "RetractionExpansionTube "
                                   "finished reading experimental "
                                   "data from file <"
                                << filename << ">."<< std::endl;
@@ -168,7 +155,7 @@ read_test_protocol (const std::string &filename,const std::string& column_name_d
 template <int dim>
 inline
 void
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 run (Sample<dim> &sample)
 {
     using namespace dealii;
@@ -181,16 +168,18 @@ run (Sample<dim> &sample)
     std::map<dealii::types::global_dof_index,double> prescribed;
 
     auto &dof_handler = sample.get_dof_handler ();
-    // auto &mapping     = sample.get_mapping ();
+    auto &mapping     = sample.get_mapping ();
+
+    this->boundary_set.set_size(dof_handler.n_dofs());
 
     GetConstrainedBoundaryIDs constr_boundary_ids;
     sample.get_geometry().accept(constr_boundary_ids);
 
-    MeasureBoundaryRadialYZWorker<dim> force_worker;
-    force_worker.set_active (constr_boundary_ids.inhomogeneous);
+    MeasureBoundaryForceWorker<dim> force_worker;
+    force_worker.set_active (constr_boundary_ids.inhomogeneousA);
 
-    Tensor<1,dim,double> force_area;
-    auto force_copier = force_worker.create_copier(force_area);
+    Tensor<1,dim,double> force;
+    auto force_copier = force_worker.create_copier (force);
 
     auto connection_force = sample.connect_boundary_loop (
                                        force_worker,
@@ -200,10 +189,8 @@ run (Sample<dim> &sample)
     std::map<types::global_dof_index, double> boundary_values;
 
     std::vector<double> times;
-    std::vector<double> diameters;
     std::vector<double> forces;
-    std::vector<double> areas;
-    std::vector<double> pressures;
+    std::vector<double> diameters;
 
     // When the prescribed displacement per step is too large, the algorithm
     // reduces the step width and tries to apply the the boundary conditions
@@ -211,19 +198,26 @@ run (Sample<dim> &sample)
     // of allowed refinements of the step width is limited to 5.
     unsigned int refinement_lvl = 0;
 
+    
+    this->boundary_set.clear();
+    IndexSet tmp_boundary_set(this->boundary_set);
+
+    
     for (InputData &input : this->input_data)
     {
         times.clear();
-        diameters.clear();
         forces.clear();
-        areas.clear();
-        pressures.clear();
+        diameters.clear();
+        this->boundary_set.clear();
 
+        double depth_of_tube =  this->center[0]-this->length;
         for (unsigned int step = 0; step < input.data.size(); ++step)
         {
+            double scale_factor = 1;
             boundary_values.clear();
+            // tmp_boundary_set = this->boundary_set;
             // Reset the force.
-            force_area = 0.;
+            force = 0;
 
             double time          = input.data[step].first;
             double previous_time = step>0? input.data[step-1].first : 0;
@@ -234,24 +228,27 @@ run (Sample<dim> &sample)
 	    
             // Compute the step size
             double dt = time-previous_time;
-            efi::efilog(Verbosity::normal) << "Current time: " << time << std::endl;
             // std::vector<scalar_type> valuesA(Extractor<dim>::n_components,0);
             // std::vector<scalar_type> valuesB(Extractor<dim>::n_components,0);
 
             // Note that the strain data is given in percent, therefore it must
             // be multiplied by the height of the sample.
-            double displacement = input.data[step].second;
-            double major_d = displacement;
-            double minor_d = this->diameter_minor/this->diameter_major*displacement;
-            efi::efilog(Verbosity::normal) << "Current diamaters of tube: major: " << major_d << ", minor: " << minor_d << std::endl;
+            double diameter = input.data[step].second;
+            efi::efilog(Verbosity::normal) << "Diameter of Tube: " << diameter << std::endl;
             
             
+            // std::vector<std::pair<double,double>> scale_factor;
+            // scale_factor.insert(std::make_pair<double,double>(0.,1.));
+            // for (unsigned int radius_factor = 0; radius_factor < percentage_diameter.size(); ++radius_factor)
+            // {
 
             // Testing for interaction with reatraction spatulars
             auto &fe = sample.get_fe();
 
             Quadrature<dim-1> face_quadrature(fe.get_unit_face_support_points());
-            FEFaceValues<dim> fe_values_face(fe, face_quadrature, update_quadrature_points);
+            FEFaceValues<dim> fe_values_face(fe, face_quadrature, update_quadrature_points |
+                                                update_normal_vectors |
+                                                update_gradients);
 
             const unsigned int dofs_per_face = fe.n_dofs_per_face();
             const unsigned int n_face_q_points = face_quadrature.size();
@@ -259,116 +256,141 @@ run (Sample<dim> &sample)
             std::vector<types::global_dof_index> dof_indices(dofs_per_face);
             std::vector<bool> touched_dofs(dof_handler.n_dofs(),false);
 
-
-            // QGauss<dim-1> face_area_quadrature(fe.degree);                        
-            // FEFaceValues<dim> fe_values_face_area(fe, face_area_quadrature, update_JxW_values);
-            // const unsigned int n_face_area_q_points = face_area_quadrature.size();
-            double x1, y1;
-            // std::cout  << "n_face_q_points: " << n_face_q_points << std::endl;
-            double area = 0.0;
+            double x_value, y_value, z_value;
             for (const auto & cell : dof_handler.active_cell_iterators())
                 if(!cell->is_artificial() && cell->at_boundary())
                     for (const auto & face : cell->face_iterators())
                         if (face->at_boundary())
-                                if (face->boundary_id() == 1)
+                                if (face->boundary_id() == 501 || face->boundary_id() == 503)
                                 {
-                                    // area += face->measure();
                                     fe_values_face.reinit(cell, face);
                                     face->get_dof_indices(dof_indices);
                                     for (unsigned int q_point = 0; q_point<n_face_q_points; q_point += dim)
                                     {
-                                        const int index = dof_indices[q_point];
-
-
-                                        // area += fe_values_face.JxW(q_point);
+                                        const int index = dof_indices[q_point];                            
                                         if (!touched_dofs[index])
                                         {
-                                            dealii::Point<dim> support_pnt = fe_values_face.quadrature_point(q_point); 
                                             touched_dofs[index] = true;
-                                            bool print = false;
+                                            dealii::Point<dim> support_pnt = fe_values_face.quadrature_point(q_point);
+                                            Point<dim> current_point_disp;
+                                            sample.get_slave_pnt(support_pnt,current_point_disp,index);
+                                            
+                                            x_value = current_point_disp[0];
+                                            y_value = current_point_disp[1];
+                                            z_value = current_point_disp[2];
+                                            if (x_value >= depth_of_tube)
+                                            {                                                
+                                                double c0 = this->center[1];
+                                                double c1 = this->center[2];
+                                                double radius_1 = (diameter/2);
+                                                double radius_0 = (diameter/2);
+                                                double point_in_ellipse = ((z_value-c1)*(z_value-c1))/((radius_1)*(radius_1)) + 
+                                                                            ((y_value-c0)*(y_value-c0))/((radius_0)*(radius_0));
 
-                                            // x_value = current_point_disp[0];
-                                            x1 = support_pnt[2];
-                                            y1 = support_pnt[1];
-
-                                            double a = minor_d/2.; // along z-axis (x)
-                                            double b = major_d/2.; // along y-axis
-                                            double centerx =  this->center[2];
-                                            double centery =  this->center[1];
-                                            double x,y;
-
-                                            double point_in_ellipse = ((x1-centerx)*(x1-centerx))/((a)*(a)) + 
-                                                                            ((y1-centery)*(y1-centery))/((b)*(b));
-                                                                            
-                                            if (point_in_ellipse <= 1.0 ) 
-                                            {
-                                                std::vector<int> multipliers(2);
-                                                multipliers[0] = 1;
-                                                multipliers[1] = 1;
-
-                                                x1 = x1 - centerx;
-                                                y1 = y1 - centery;
-
-                                                if (x1<0){
-                                                    multipliers[0] = -1;
-                                                    x1 = -1*x1;
-                                                }
-
-                                                if (y1<0){
-                                                    multipliers[1] = -1;
-                                                    y1 = -1*y1;
-                                                }
-
-                                                if (std::fabs(x1) < 1e-6) {
-                                                    x = x1;
-                                                    y = b;
-                                                }
-                                                else {
-
-                                                    double m = (y1)/(x1);
-
-                                                    double A = sqr(b) + (sqr(a)*sqr(m));
-                                                    double C = (sqr(a)*sqr(b));
-
-                                                    x = (std::sqrt((4*A*C)))/(2*A);
-                                                    y = m*(x);
-                                                }
-
-                                                x = x*multipliers[0];
-                                                x = x + centerx;
-                                                y = y*multipliers[1];
-                                                y = y + centery;
-                                                dealii::Point<dim> master_pnt;
-                                                master_pnt[0] = support_pnt[0];
-                                                master_pnt[1] = y;
-                                                master_pnt[2] = x;
-
-                                                Tensor<1,dim> inhom_value = master_pnt - support_pnt;
-
-                                                if (print)
+                                                if ( point_in_ellipse <= 1.0 )
                                                 {
-                                                    std::cout << " index : " << index << std::endl;
-                                                    std::cout << " x1 : " << x1 << ", y1 : " << y1 << std::endl;
-                                                    std::cout << " master_pnt: " << master_pnt << std::endl;
-                                                    std::cout << " support_pnt: " << support_pnt << std::endl;
-                                                    std::cout << " INHOM_VALUE: " << inhom_value << std::endl;
+                                                    double y0 = y_value;
+                                                    double y1 = z_value;
+                                                    // std::cout << "current tube diameter: " << radius_0 << std::endl;
+                                                    // std::cout << " index : " << index << std::endl;
+                                                    // std::cout << " y0 : " << y0 << ", y1 : " << y1 << std::endl;
+                                                    std::vector<int> multipliers(2);
+                                                    multipliers[0] = 1;
+                                                    multipliers[1] = 1;
+                                                    y0 = y0 - c0;
+                                                    y1 = y1 - c1;
+                                                    if (y0<0)
+                                                    {
+                                                        multipliers[0] = -1;
+                                                    }
+                                                    if (y1<0)
+                                                    {
+                                                        multipliers[1] = -1;
+                                                    }
+                                                    double x0, x1, distance;
+                                                    distance = this->distance_point_ellipse(radius_0, radius_1, std::fabs(y0), std::fabs(y1), x0, x1);
+
+                                                    x0 = (x0 * multipliers[0]) + c0;
+                                                    x1 = (x1 * multipliers[1]) + c1;
+                                                    
+                                                    // std::cout << " x0 : " << x0 << ", x1 : " << x1 << std::endl;
+                                                    
+                                                    dealii::Point<dim> master_pnt;
+                                                    master_pnt[0] = support_pnt[0];
+                                                    master_pnt[1] = x0;//*radius_factor;
+                                                    master_pnt[2] = x1;//*radius_factor;
+
+                                                    Tensor<1,dim> inhom_value = master_pnt - support_pnt;
+
+                                                    // std::cout << " dz: " << dz << std::endl;
+                                                    // std::cout << " dy: " << dy << std::endl;
+                                                    // std::cout << " master_pnt: " << master_pnt << std::endl;
+                                                    // std::cout << " support_pnt: " << support_pnt << std::endl;
+                                                    // std::cout << " INHOM_VALUE: " << inhom_value << std::endl;
                                                     // std::cout << " current_point: " << current_point_disp << std::endl;
-                                                }
-                                                // Point<dim> new_point = current_point_disp;
-                                                for (int d = 1; d<dim; d++)
-                                                {
-                                                    if (std::fabs(inhom_value[d]) > 1e-6){
-                                                        {
-                                                                boundary_values.insert(std::pair<dealii::types::global_dof_index,double>(index+d, inhom_value[d]));
-                                                                
+                                                    Point<dim> new_point = current_point_disp;
+                                                    for (int d = 1; d<dim; d++)
+                                                    {
+                                                        if (std::fabs(inhom_value[d]) > 1e-9){
+
+                                                            // std::cout << " dof: " << index+d << ", dimension: " << d << std::endl;
+                                                            double curr_difference = (current_point_disp[d]-support_pnt[d]);
+                                                            // if (std::fabs(inhom_value[d]) < std::fabs(curr_difference))
+                                                            // {
+                                                            //     std::cout << " new difference: " << inhom_value[d] << std::endl;
+                                                            //     std::cout << " current difference: " << curr_difference << std::endl;
+                                                            // }
+                                                            // if ( (std::fabs(difference) - std::fabs(inhom_value[d])) < 1e-8)
+                                                            {
+                                                                new_point[d] = support_pnt[d] + inhom_value[d];
+                                                                // if ( ((index+d) != 2782) && ((index+d) != 2743))
+                                                                // {
+                                                                    boundary_values.insert(std::pair<dealii::types::global_dof_index,double>(index+d, inhom_value[d]));
+                                                                    if (!this->boundary_set.is_element(index+d))
+                                                                    {
+                                                                        this->boundary_set.add_index(index+d);
+                                                                    }
+                                                                // }
+                                                            }
                                                         }
                                                     }
-                                                }
-                                            } // end if point in ellipse
-                                        }//end if(!touched_dofs[index])
+                                                    // std::cout << " new_point: " << new_point << std::endl;
+                                                    std::cout << std::endl;
+                                                }                       
+                                            }
+                                        }
                                     }
-                                            
-                                }                   
+                                }
+        //     if (sample.run (boundary_values, dt, this->boundary_set))
+        //     {
+        //             // Test nothing
+        //     }
+        //     else
+        //     {
+        //         if (std::fabs(radius_factor - 1) < 1e-6)
+        //         {
+        //             // Insert a new intermediate step (linearly interpolated)
+        //             scale_factor.insert(cale_factor.begin(),
+        //                     std::make_pair (
+        //                          0.5 * (scale_factor[0].first),
+        //                          0.5 * (scale_factor[0].second)));
+        //         }
+        //         else
+        //         {
+        //             // TODO Use a higher order interpolation scheme to guess
+        //             // intermediate values.
+        //             // Insert a new intermediate step (linearly interpolated)
+        //             scale_factor.insert(scale_factorbegin() + step,
+        //                     std::make_pair (
+        //                          0.5 * (scale_factor[step-1].first
+        //                               + scale_factor[step].first),
+        //                          0.5 * (scale_factor[step-1].second
+        //                               + scale_factor[step].second)));
+        //         }
+        //     }
+        // }                    
+
+            // if (sample.run (boundary_values, dt, this->boundary_set))
             if (sample.run (boundary_values, dt))
             {
                 // When the refinement level is zero, then we have reached a
@@ -378,21 +400,11 @@ run (Sample<dim> &sample)
                 // output arrays.
                 if (refinement_lvl == 0)
                 {
-                    double total_force = Utilities::MPI::sum(force_area[0], this->mpi_communicator);
-                    double total_area = Utilities::MPI::sum(force_area[1], this->mpi_communicator);
-                    
                     // Write to data arrays
                     times.push_back (time);
                     diameters.push_back (input.data[step].second);
-                    forces.push_back (total_force);
-                    areas.push_back (total_area);
-                    pressures.push_back (total_force/total_area);
-
-                    // efilog(Verbosity::normal)  << "Total force: " << total_force;
-                    // efilog(Verbosity::normal)  << ", total area: " << total_area;
-                    // efilog(Verbosity::normal)  << ", total area (calculated): " << (major_d*22./7.)*30;
-                    // efilog(Verbosity::normal)  << ", total pressure: " << total_force/total_area;
-                    // efilog(Verbosity::normal)  << ", total pressure (calculated): " << total_force/((major_d*22./7.)*30) << std::endl;
+                    forces.push_back (
+                        Utilities::MPI::sum(force[0], this->mpi_communicator));
                 }
 
                 if (refinement_lvl > 0)
@@ -424,6 +436,7 @@ run (Sample<dim> &sample)
                 AssertThrow (++refinement_lvl < 6,
                         dealii::ExcMessage ("Time step refinement level > 5."));
                 --step;
+                this->boundary_set = tmp_boundary_set;
             }
         }
     
@@ -437,9 +450,9 @@ run (Sample<dim> &sample)
             boost::filesystem::path outfilename
                 = outdir / infilepath.filename();
 
-            io::CSVWriter<5> out(outfilename.string());
-            out.write_headers("time",this->depth_column_name,"force","area","pressure");
-            out.write_rows(times,diameters,forces,areas,pressures);
+            io::CSVWriter<3> out(outfilename.string());
+            out.write_headers("time",this->diameter_column_name,"force");
+            out.write_rows(times,diameters,forces);
         }
 
     }
@@ -453,7 +466,7 @@ run (Sample<dim> &sample)
 
 template <int dim>
 double
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 sqr( const double x)
 {
     return x*x;    
@@ -462,7 +475,7 @@ sqr( const double x)
 
 template <int dim>
 double
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 robust_length (const double v0, const double v1)
 {
     double magV0 = std::fabs(v0);
@@ -475,7 +488,7 @@ robust_length (const double v0, const double v1)
 
 template <int dim>
 double
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 get_root (const double r0, const double z0, const double z1, double g)
 {
     const unsigned int maxIter = 200;
@@ -515,7 +528,7 @@ get_root (const double r0, const double z0, const double z1, double g)
 
 template <int dim>
 double
-RetractionEllipse<dim>::
+RetractionExpansionTube<dim>::
 distance_point_ellipse (const double e0, const double e1, const double y0, const double y1, double &x0, double &x1)
 {
     double distance = 0;
@@ -570,19 +583,12 @@ distance_point_ellipse (const double e0, const double e1, const double y0, const
     return distance;
 }
 
-// get_master_point(dealii::Point<dim> &master_pnt, 
-//                 const dealii::Point<dim> &slave_pnt,
-//                 const dealii::boundary_ids)
-// {
-//     master_pnt = slave_pnt;
-// }
-
 // instantiation
-template class RetractionEllipse<2>;
-template class RetractionEllipse<3>;
+template class RetractionExpansionTube<2>;
+template class RetractionExpansionTube<3>;
 
 // Registration
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RetractionEllipse,2));
-EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RetractionEllipse,3));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RetractionExpansionTube,2));
+EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(RetractionExpansionTube,3));
 }// namespace efi
 

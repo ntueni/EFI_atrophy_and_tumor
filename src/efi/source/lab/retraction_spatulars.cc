@@ -127,6 +127,7 @@ connect_constraints (Sample<dim> &sample) const
         
         // auto inhom_mask  = Extractor<dim>::displacement_mask_inhom(0);
         std::vector<bool> selector (Extractor<dim>::n_components,false);
+        selector[Extractor<dim>::first_displacement_component+1] = true;
         selector[Extractor<dim>::first_displacement_component+2] = true;
 
         dealii::ComponentMask inhom_mask (selector);
