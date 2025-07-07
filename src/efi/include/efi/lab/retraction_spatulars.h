@@ -174,6 +174,7 @@ visit (const ImportedGeometry<dim> &)
     this->inhomogeneousB = 3;
 }
 
+
 }//namespace efi
 
 #endif /* SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_SPATULARS_H_ */

@@ -12,8 +12,8 @@
  * Author: Stefan Kaessmair
  */
 
-#ifndef SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_
-#define SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_
+#ifndef SRC_EFI_INCLUDE_EFI_LAB_TUMOR_GROWTH_H_
+#define SRC_EFI_INCLUDE_EFI_LAB_TUMOR_GROWTH_H_
 
 // stl headers
 #include <vector>
@@ -31,17 +31,18 @@
 
 namespace efi {
 
-/// TRetraction by insertion of tubular device. Translation of tube is along negative X-axis
+// Tumor growth/schrinkage
 /// @author Stefan Kaessmair
 template <int dim>
-class RetractionEllipse : public TestingDevice <dim>
+class Tumor : public TestingDevice <dim>
 {
 public:
+
     /// Type of scalar numbers.
     using scalar_type = double;
 
     /// Constructor
-    RetractionEllipse (const std::string &subsection_name,
+    Tumor (const std::string &subsection_name,
                const std::string &unprocessed_input = "",
                MPI_Comm mpi_communicator = MPI_COMM_WORLD);
 
@@ -58,12 +59,7 @@ public:
     void
     run (Sample<dim> &sample) final;
 
-    void
-    getCenter(dealii::Point<dim> center);
-
 private:
-
-    static const unsigned int translation_axis = 1;
 
     /// Helper struct for storing input data.
     struct InputData
@@ -71,7 +67,7 @@ private:
         /// Filename of the input data.
         std::string filename;
 
-        /// Time (first) and (second) data translation of tube along negative x-axis.
+        /// Time (first) and rotation angle (second) data.
         std::vector<std::pair<double,double>> data;
     };
 
@@ -95,75 +91,48 @@ private:
 
     // Read the test protocol from a file.
     void
-    read_test_protocol (const std::string &filename,const std::string & column_name_displacement);
-
-    // void get_master_point(dealii::Point<dim> &master_pnt, 
-    //             const dealii::Point<dim> &slave_pnt, const dealii::boundary_ids boundary_id);
+    read_test_protocol (const std::string &filename, const std::string &column_name_displacement);
 
     // Input data
     std::vector<InputData> input_data;
 
-    std::string depth_column_name;
-
-    dealii::Point<dim> center;
-    double diameter_minor;
-    double diameter_major;
-    double length;
-
-    double
-    sqr (const double);
-
-    double
-    robust_length (const double v0, const double v1);
-
-    double
-    get_root (const double , const double, const double, double) ;
-
-    double
-    distance_point_ellipse (const double , const double, const double, const double, double&, double&);
-
+    std::string column_name_displacement;
 };
 
 
 
 //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
 
+
+
 template <int dim>
-RetractionEllipse<dim>::
-RetractionEllipse (const std::string &subsection_name,
+Tumor<dim>::
+Tumor (const std::string &subsection_name,
            const std::string &unprocessed_input,
            MPI_Comm mpi_communicator)
-: TestingDevice<dim> (subsection_name, unprocessed_input,mpi_communicator),
-diameter_minor(4),
-diameter_major(6)
+: TestingDevice<dim> (subsection_name, unprocessed_input,mpi_communicator)
 {
-    efilog(Verbosity::verbose) << "New Retraction with ellipse cross section created ("
+    efilog(Verbosity::verbose) << "New Tumor created ("
                               << subsection_name
                               << ")." << std::endl;
 }
 
 
-template <int dim>
-void
-RetractionEllipse<dim>::
-getCenter(dealii::Point<dim> center)
-{
-    center = this->center;
-}
 
 template <int dim>
 void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+Tumor<dim>::GetConstrainedBoundaryIDs::
 visit (const Block<dim> &)
 {
-    this->homogeneous = 0;
-    this->inhomogeneous = 1;
+    this->homogeneous = 1;
+    this->inhomogeneous = 2;
 }
+
 
 
 template <int dim>
 void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+Tumor<dim>::GetConstrainedBoundaryIDs::
 visit (const Cylinder<dim> &)
 {
     this->homogeneous = 1;
@@ -172,13 +141,15 @@ visit (const Cylinder<dim> &)
 
 template <int dim>
 void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+Tumor<dim>::GetConstrainedBoundaryIDs::
 visit (const ImportedGeometry<dim> &)
 {
-    this->homogeneous = 2;
-    this->inhomogeneous = 1;
+    this->homogeneous = 400;
+    this->inhomogeneous = 300 ;
 }
+
 
 }//namespace efi
 
-#endif /* SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_ */
+
+#endif /* SRC_EFI_INCLUDE_EFI_LAB_TUMOR_GROWTH_H_ */

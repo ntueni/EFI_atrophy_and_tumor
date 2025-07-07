@@ -25,7 +25,8 @@
 #include <efi/lab/translational_rheometer.h>
 #include <efi/lab/retraction_spatulars.h>
 #include <efi/lab/retraction_ellipse.h>
-#include <efi/lab/atrophy.h>
+#include <efi/lab/retraction_expansion_tube.h>
+#include <efi/lab/tumor.h>
 
 
 namespace efi
@@ -138,9 +139,15 @@ create (const std::string& type_str,
 
         return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
     }
-    if (type_str == "atrophy")
+    if (type_str == "retraction_expansion_tube")
     {
-        using model_type = Atrophy<dim>;
+        using model_type = RetractionExpansionTube<dim>;
+
+        return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
+    }
+    if (type_str == "tumor")
+    {
+        using model_type = Tumor<dim>;
 
         return make_new_if_constructible<model_type>(std::forward<Args>(args)...);
     }
@@ -169,8 +176,8 @@ get_names ()
 {
     return "rotational_rheometer|translational_rheometer|"
            "tension_compression_testing_device|"
-           "retraction_spatulars|retraction_ellipse|"
-           "atrophy";
+           "retraction_spatulars|retraction_ellipse|retraction_expansion_tube|"
+           "tumor";
 }
 
 }//namespace efi

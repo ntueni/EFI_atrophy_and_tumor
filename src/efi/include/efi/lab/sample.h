@@ -36,7 +36,6 @@
 #include <efi/worker/boundary_worker.h>
 #include <efi/worker/general_cell_data_storage.h>
 #include <efi/worker/scratch_data.h>
-#include <efi/grid/obstacle.h>
 
 namespace efi {
 
@@ -87,7 +86,9 @@ public:
     bool
     run (const std::map<dealii::types::global_dof_index,double> &prescribed,
          const double time_step_size);
-    // value.
+    bool
+    run (const std::map<dealii::types::global_dof_index,double> &prescribed,
+         const double time_step_size, const double load);
 
     // Initialize the members.
     // TODO Integrate set_output_directory in initialize.
@@ -123,14 +124,14 @@ public:
     const Geometry<dim> &
     get_geometry () const;
 
-    GeneralCellDataStorage &
-    get_cell_data_history_storage();
-
     const std::vector<dealii::types::material_id>
     get_material_ids() const;
 
     void
     set_material_ids();
+
+    void
+    get_slave_pnt(const dealii::Point<dim> &, dealii::Point<dim> &, dealii::types::global_dof_index);
 
     // // Return a constant reference to the used constitutive model.
     // const ConstitutiveBase<dim> &
@@ -222,6 +223,9 @@ public:
         boost::signals2::signal<
             void(dealii::AffineConstraints<scalar_type> &)>
         make_constraints;
+        boost::signals2::signal<
+            void(dealii::AffineConstraints<scalar_type> &, LA::MPI::Vector &)>
+        make_constraints2;
 
         // This signal is triggered when the nonlinear solver
         // has converged.
@@ -273,6 +277,9 @@ private:
     //Move mesh
     void
     move_mesh(const  LA::MPI::Vector &displacement) const;
+
+    double 
+    calculate_area(dealii::types::boundary_id id) const;
 
 protected:
 
@@ -337,9 +344,8 @@ private:
     // time step size
     scalar_type time_step_size;
     scalar_type elapsed_time;
-
-
-    scalar_type load;
+    // current_load
+    scalar_type applied_load;
 
     // Sample of a scratch data object. It contains all
     // data structures and temporary objects required
@@ -444,6 +450,8 @@ get_fe () const
     return *(this->fe);
 }
 
+
+
 template <int dim>
 inline
 const Geometry<dim>&
@@ -452,17 +460,6 @@ get_geometry () const
 {
     Assert (this->geometry, dealii::ExcNotInitialized());
     return *(this->geometry);
-}
-
-
-template <int dim>
-inline
-GeneralCellDataStorage&
-Sample<dim>::
-get_cell_data_history_storage()
-{
-    Assert (this->cell_data_history_storage, dealii::ExcNotInitialized());
-    return *(this->cell_data_history_storage);
 }
 
 template <int dim>
@@ -475,6 +472,7 @@ set_material_ids()
         if (!std::count(material_ids.begin(), material_ids.end(),cell->material_id()))
             material_ids.push_back(cell->material_id());
 }
+
  
 template <int dim>
 inline
@@ -496,6 +494,7 @@ get_constitutive_model (int material_id) const
 }
 
 
+
 template <int dim>
 inline
 boost::signals2::connection
@@ -511,9 +510,9 @@ connect_mesh_loop (
 
 
     return this->connect_mesh_loop (
-                *(this->constitutive_model_map.at(3)),
+                *(this->constitutive_model_map.at(25)),
                 external_cell_worker,
-                *(this->constitutive_model_map.at(3)),
+                *(this->constitutive_model_map.at(25)),
                 external_boundary_worker,
                 external_copier,
                 signal,
@@ -593,7 +592,13 @@ connect_mesh_loop (
                         return;
 
                     try
-                    {
+                    {    
+                        ScratchDataTools::get_or_add_material(scratch_data) 
+                        = cell->material_id();
+
+                        ScratchDataTools::get_or_add_load ((scratch_data)) 
+                        = this->applied_load;
+
                         external_cell_worker.fill (
                                 external_cell_data_processor,
                                 this->locally_relevant_solution,
@@ -671,7 +676,7 @@ connect_mesh_loop (
                 // Set the time step size.
                 ScratchDataTools::get_or_add_time_step_size(
                         external_sample_scratch_data) = this->time_step_size;
-                
+
                 mesh_loop (
                         this->dof_handler.begin_active(),
                         this->dof_handler.end(),
@@ -739,6 +744,12 @@ connect_boundary_loop (
                     // get cell material_id()
                     int material_id = cell->material_id();
 
+                    ScratchDataTools::get_or_add_material(scratch_data) 
+                        = cell->material_id();
+
+                    ScratchDataTools::get_or_add_load ((scratch_data)) 
+                    = this->applied_load;
+
                     external_boundary_worker.fill (
                             this->get_constitutive_model(material_id),
                             this->locally_relevant_solution,
@@ -759,7 +770,7 @@ connect_boundary_loop (
     dealii::UpdateFlags updateFlags = external_boundary_worker.get_needed_update_flags ();
     for (const auto & cm: this->constitutive_model_map)
     {
-        updateFlags = updateFlags | cm.second->get_needed_update_flags ();
+        updateFlags = updateFlags | cm.second->get_needed_update_flags () ;
     }
 
     // get update flags for all material models
@@ -792,7 +803,6 @@ connect_boundary_loop (
                 ScratchDataTools::get_or_add_time_step_size(
                         external_sample_scratch_data) = this->time_step_size;
 
-                
                 // Now run the mesh loop with the specified worker classes.
                 mesh_loop (
                         this->dof_handler.begin_active(),
@@ -874,6 +884,12 @@ connect_boundary_loop (
                 {
                     // get cell material_id()
                     int material_id = cell->material_id();
+
+                    ScratchDataTools::get_or_add_material(scratch_data) 
+                        = cell->material_id();
+
+                    ScratchDataTools::get_or_add_load ((scratch_data)) 
+                    = this->applied_load;
 
                     external_boundary_worker.fill (
                             this->get_constitutive_model(material_id),
@@ -1102,6 +1118,7 @@ Sample<dim>::Signals::
 disconnect_all_slots ()
 {
     this->make_constraints.disconnect_all_slots ();
+    this->make_constraints2.disconnect_all_slots ();
     this->pre_nonlinear_solve.disconnect_all_slots ();
     this->post_nonlinear_solve.disconnect_all_slots ();
 }

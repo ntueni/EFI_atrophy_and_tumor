@@ -12,8 +12,8 @@
  * Author: Stefan Kaessmair
  */
 
-#ifndef SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_
-#define SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_
+#ifndef SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_EXPANSION_TUBE_H_
+#define SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_EXPANSION_TUBE_H_
 
 // stl headers
 #include <vector>
@@ -34,14 +34,14 @@ namespace efi {
 /// TRetraction by insertion of tubular device. Translation of tube is along negative X-axis
 /// @author Stefan Kaessmair
 template <int dim>
-class RetractionEllipse : public TestingDevice <dim>
+class RetractionExpansionTube : public TestingDevice <dim>
 {
 public:
     /// Type of scalar numbers.
     using scalar_type = double;
 
     /// Constructor
-    RetractionEllipse (const std::string &subsection_name,
+    RetractionExpansionTube (const std::string &subsection_name,
                const std::string &unprocessed_input = "",
                MPI_Comm mpi_communicator = MPI_COMM_WORLD);
 
@@ -57,9 +57,6 @@ public:
     /// sample attached to it.
     void
     run (Sample<dim> &sample) final;
-
-    void
-    getCenter(dealii::Point<dim> center);
 
 private:
 
@@ -80,7 +77,8 @@ private:
     struct GetConstrainedBoundaryIDs : public GeometryVisitor<dim>
     {
         dealii::types::boundary_id homogeneous;
-        dealii::types::boundary_id inhomogeneous;
+        dealii::types::boundary_id inhomogeneousA;
+        dealii::types::boundary_id inhomogeneousB;
 
         void visit (const Block<dim> &) final;
         void visit (const Cylinder<dim> &) final;
@@ -103,12 +101,12 @@ private:
     // Input data
     std::vector<InputData> input_data;
 
-    std::string depth_column_name;
+    std::string diameter_column_name;
 
     dealii::Point<dim> center;
-    double diameter_minor;
-    double diameter_major;
     double length;
+
+    dealii::IndexSet boundary_set;
 
     double
     sqr (const double);
@@ -129,56 +127,49 @@ private:
 //---------------------- INLINE AND TEMPLATE FUNCTIONS -----------------------//
 
 template <int dim>
-RetractionEllipse<dim>::
-RetractionEllipse (const std::string &subsection_name,
+RetractionExpansionTube<dim>::
+RetractionExpansionTube (const std::string &subsection_name,
            const std::string &unprocessed_input,
            MPI_Comm mpi_communicator)
 : TestingDevice<dim> (subsection_name, unprocessed_input,mpi_communicator),
-diameter_minor(4),
-diameter_major(6)
+length(50)
 {
-    efilog(Verbosity::verbose) << "New Retraction with ellipse cross section created ("
+    efilog(Verbosity::verbose) << "New Retraction with expansion tube created ("
                               << subsection_name
                               << ")." << std::endl;
 }
 
-
 template <int dim>
 void
-RetractionEllipse<dim>::
-getCenter(dealii::Point<dim> center)
-{
-    center = this->center;
-}
-
-template <int dim>
-void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+RetractionExpansionTube<dim>::GetConstrainedBoundaryIDs::
 visit (const Block<dim> &)
 {
     this->homogeneous = 0;
-    this->inhomogeneous = 1;
+    this->inhomogeneousA = 1;
+    this->inhomogeneousB = 3;
 }
 
 
 template <int dim>
 void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+RetractionExpansionTube<dim>::GetConstrainedBoundaryIDs::
 visit (const Cylinder<dim> &)
 {
     this->homogeneous = 1;
-    this->inhomogeneous = 2;
+    this->inhomogeneousA = 2;
+    this->inhomogeneousB = 3;
 }
 
 template <int dim>
 void
-RetractionEllipse<dim>::GetConstrainedBoundaryIDs::
+RetractionExpansionTube<dim>::GetConstrainedBoundaryIDs::
 visit (const ImportedGeometry<dim> &)
 {
     this->homogeneous = 2;
-    this->inhomogeneous = 1;
+    this->inhomogeneousA = 1;
+    this->inhomogeneousB = 3;
 }
 
 }//namespace efi
 
-#endif /* SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_ELLIPSE_H_ */
+#endif /* SRC_EFI_INCLUDE_EFI_LAB_RETRACTION_EXPANSION_TUBE_H_ */
