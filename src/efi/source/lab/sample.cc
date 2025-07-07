@@ -576,6 +576,67 @@ reinit_sparsity ()
                                << std::endl;
 }
 
+
+
+template <int dim>
+class TumorGrowthBoundaryWorker
+{
+private:
+    double growth_load;
+    dealii::types::boundary_id tumor_boundary_id;
+    
+public:
+    TumorGrowthBoundaryWorker(double load, dealii::types::boundary_id id)
+        : growth_load(load), tumor_boundary_id(id) {}
+    
+    void set_growth_load(double load) { growth_load = load; }
+    
+    template <typename CellIteratorType>
+    void fill(const CellIteratorType &cell,
+              const unsigned int face_no,
+              ScratchData<dim> &scratch_data,
+              CopyData &copy_data)
+    {
+        using namespace dealii;
+        
+        const auto face = cell->face(face_no);
+        if (face->boundary_id() != tumor_boundary_id)
+            return;
+            
+        const auto &fe_face_values = scratch_data.get_fe_face_values();
+        const unsigned int dofs_per_cell = fe_face_values.get_fe().dofs_per_cell;
+        const unsigned int n_face_q_points = fe_face_values.n_quadrature_points;
+        
+        // Reinit face values
+        fe_face_values.reinit(cell, face_no);
+        
+        // Loop over quadrature points
+        for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point)
+        {
+            const auto &normal = fe_face_values.normal_vector(q_point);
+            const double JxW = fe_face_values.JxW(q_point);
+            
+            // Loop over test functions
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            {
+                const unsigned int component_i = 
+                    fe_face_values.get_fe().system_to_component_index(i).first;
+                
+                if (component_i < dim) // Only displacement components
+                {
+                    const double phi_i = fe_face_values.shape_value(i, q_point);
+                    
+                    // Tumor growth traction: t = -g(t) * n
+                    // Contribution to weak form: ∫_Γ_T t · δu dΓ = ∫_Γ_T (-g*n) · δu dΓ
+                    copy_data.cell_rhs(i) += (-growth_load * normal[component_i]) * phi_i * JxW;
+                }
+            }
+        }
+    }
+};
+
+
+
 template <int dim>
 void
 Sample<dim>::
