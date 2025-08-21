@@ -48,6 +48,8 @@ evaluate (ScratchData<dim> &scratch_data) const
 
    const auto &global_vector_name = Extractor<dim>::global_vector_name();
 
+   int material = ScratchDataTools::get_material(scratch_data);
+   
    // Create some aliases.
    auto &F   = ScratchDataTools::get_or_add_deformation_grads        (scratch_data,global_vector_name,ad_type(0));
    auto &tau = ScratchDataTools::get_or_add_kirchoff_stresses        (scratch_data,global_vector_name,ad_type(0));
@@ -76,11 +78,25 @@ evaluate (ScratchData<dim> &scratch_data) const
    // a potential their tangent is symmetric.
    // 1/lambda[b]*(d(principal_S[a])/d(lambda[b]))
    SymmetricTensor<2,dim,ad_type> lambda_inv_dprincipal_S_dlambda;
-
    // Loop over the quadrature points.
    for (unsigned int q = 0; q < n_q_points; ++q)
    {
-       F [q] = StandardTensors<dim>::I + Grad_u[q];
+                // Apply multiplicative growth for tumor materials (28 and 29)
+        // Interpret the global 'load' scalar as an isotropic growth coefficient g
+        // such that F = Fe * Fg, with Fg = (1+g) I  -> Fe = F * Fg^{-1}
+        const double gcoef = ScratchDataTools::get_load (scratch_data);
+        if (material == 28 || material == 29)
+        {
+            const ad_type one_over_g = 1.0/(1.0 + static_cast<ad_type>(gcoef));
+            const Tensor<2,dim,ad_type> Fg_inv = one_over_g * StandardTensors<dim>::I;
+            F [q] = (StandardTensors<dim>::I + Grad_u[q]) * Fg_inv;
+        }
+        else
+        {
+            F [q] = (StandardTensors<dim>::I + Grad_u[q]);
+        }
+
+        
 
        // Compute the eigenvalues and -vectors of b = F*F^T.
        // By default ql_implicit_shifts algorithm is used.
@@ -245,6 +261,10 @@ get_data_interpretation () const
     position += data_interpretation.back().n_components();
 
     data_interpretation.push_back (
+            create_data_interpretation<Tensor<0,dim,scalar_type>>("hydrostatic_stress",position));
+    position += data_interpretation.back().n_components();
+    
+    data_interpretation.push_back (
             create_data_interpretation<Tensor<0,dim,scalar_type>>("von_mises",position));
     position += data_interpretation.back().n_components();
     // data_interpretation.push_back (
@@ -271,9 +291,9 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     Tensor<2,dim,double> F;
     Tensor<2,dim> identity;
     identity = 0.;
-    for (int d = 0; d<dim; d++){
-        identity[d][d] = 1.0;
-    }
+    identity[0][0] = 1.0;
+    identity[1][1] = 1.0;
+    identity[2][2] = 1.0;
 
     std::array<double,dim> lambda; // principal stretches
 
@@ -281,6 +301,7 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     Tensor<1,dim,double> principal_stresses_iso;  // principal volumetric stresses
 
     double von_mises_tmp = 0.;
+    double hydrostatic_tmp = 0.;
     // TensorShape<0,dim,double> max_shear_strain (computed_quantities_ptr);
     // computed_quantities_ptr += Utilities::pow (dim,0);
     SymmetricTensor<2,dim> accumulated_stress;
@@ -293,17 +314,17 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
         TensorShape<1,dim,double> u (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,1);
 
-        // // Piola stress
-        Tensor<2,dim,double> tau ;
-        // computed_quantities_ptr += Utilities::pow (dim,2);
-        
-
-        // // Lagranigan strain
-        Tensor<2,dim,double> E ;
+        // Piola stress
+        Tensor<2,dim,double> tau;
         // computed_quantities_ptr += Utilities::pow (dim,2);
         
 
         // Lagranigan strain
+        Tensor<2,dim,double> E;
+        // computed_quantities_ptr += Utilities::pow (dim,2);
+        
+
+        // Principle streches
         TensorShape<0,dim,double> max_principal_stretch (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,0);
         
@@ -364,10 +385,18 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
                                                 std::pow((tau[2][2] - tau[0][0]),2))
                                         +3*(    std::pow(tau[0][1],2) + std::pow(tau[1][2],2) + std::pow(tau[2][0],2))
                                         );
+                                        
+        double tr_tau = 0.0;
+        for (unsigned int d = 0; d < dim; ++d) tr_tau += tau[d][d];
+        hydrostatic_tmp += tr_tau / static_cast<double>(dim);
+        
         // accumulated_stress += tau;
         // stress_norm = tau.norm();
     }
-    von_mises_tmp = von_mises_tmp/input_data.solution_values.size();
+    const double nqp = static_cast<double>(input_data.solution_values.size());
+    von_mises_tmp     = von_mises_tmp    / nqp;
+    hydrostatic_tmp   = hydrostatic_tmp  / nqp;
+    
     int pos = 0;
     pos += Utilities::pow (dim,1);
     // pos += Utilities::pow (dim,2);
@@ -376,9 +405,19 @@ evaluate_vector_field (const dealii::DataPostprocessorInputs::Vector<dim> &input
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
     pos += Utilities::pow (dim,0);
+    
     for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
     {
         double *computed_quantities_ptr = std::addressof(computed_quantities[q][0]) + pos;
+        TensorShape<0,dim,double> hydrostatic_stress (computed_quantities_ptr);
+        computed_quantities_ptr += Utilities::pow (dim,0);
+        hydrostatic_stress = 0;
+        hydrostatic_stress = hydrostatic_tmp;
+    }
+        
+    for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
+    {
+        double *computed_quantities_ptr = std::addressof(computed_quantities[q][0]) + pos + Utilities::pow (dim,0);
         TensorShape<0,dim,double> von_mises (computed_quantities_ptr);
         computed_quantities_ptr += Utilities::pow (dim,0);
         von_mises = 0;
@@ -468,7 +507,7 @@ compute_principal_stress_tangents (const std::array<double,dim> &lambda,
 
     for (a = 0; a < dim; ++a)
         J *= lambda[a];
-
+    
     AssertThrow(J>1e-18, ExcMessage("Degenerated element (Jacobian < 0)."));
 
     double dimrt_J     = std::pow (J,1./double(dim));
@@ -544,4 +583,3 @@ EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgden,2));
 EFI_REGISTER_OBJECT(EFI_TEMPLATE_CLASS(ModifiedOneTermOgden,3));
 
 }// namespace efi
-
